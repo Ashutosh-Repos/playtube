@@ -1,0 +1,30 @@
+{
+  "name": "notification-service",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist .turbo node_modules",
+    "lint": "eslint .",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@repo/database": "workspace:*",
+    "@repo/env": "workspace:*",
+    "@repo/events": "workspace:*",
+    "dotenv": "^16.4.5",
+    "nodemailer": "^7.0.12",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^22.0.0",
+    "@types/nodemailer": "^7.0.4",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0"
+  }
+}

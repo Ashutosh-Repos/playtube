@@ -4,17 +4,20 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "start": "turbo run start",
+    "dev:web": "turbo run dev --filter=web",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "check-types": "turbo run check-types",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,md,json}\"",
+    "clean": "turbo run clean && rm -rf node_modules"
   },
   "devDependencies": {
-    "prettier": "^3.7.4",
-    "turbo": "^2.7.2",
-    "typescript": "5.9.2"
+    "prettier": "^3.5.0",
+    "turbo": "^2.7.0",
+    "typescript": "^5.9.0"
   },
-  "packageManager": "pnpm@9.0.0",
+  "packageManager": "pnpm@9.15.0",
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   }
 }

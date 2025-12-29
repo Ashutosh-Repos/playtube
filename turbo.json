@@ -1,11 +1,29 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
+  "globalEnv": ["NODE_ENV", "CI"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "env": [
+        "DATABASE_URL", 
+        "REDIS_URL", 
+        "RABBITMQ_URL",
+        "AUTH_PRIVATE_KEY",
+        "AUTH_PUBLIC_KEY",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "SMTP_HOST",
+        "SMTP_PORT",
+        "SMTP_USER",
+        "SMTP_PASSWORD"
+      ]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
     },
     "lint": {
       "dependsOn": ["^lint"]
@@ -13,9 +31,17 @@
     "check-types": {
       "dependsOn": ["^check-types"]
     },
-    "dev": {
-      "cache": false,
-      "persistent": true
+    "db:generate": {
+      "cache": false
+    },
+    "db:push": {
+      "cache": false
+    },
+    "clean": {
+      "cache": false
+    },
+    "start": {
+      "cache": false
     }
   }
 }
