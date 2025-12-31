@@ -11,6 +11,9 @@ export const serverSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   
+  // General
+  APP_URL: z.string().url().optional().default("http://localhost:3000"), // Used for email links
+
   // Database
   DATABASE_URL: z.string().url().optional(),
   REDIS_URL: z.string().url().optional().default("redis://localhost:6379"),

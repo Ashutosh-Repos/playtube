@@ -1,5 +1,9 @@
-import startConsumer from "./consumer/consumer";
+import "dotenv/config";
+
 async function main() {
+    // Dynamic import ensures environment variables are loaded BEFORE application logic
+    const { default: startConsumer } = await import("./consumer/consumer");
+    
     try {
         await startConsumer();
     } catch (error) {

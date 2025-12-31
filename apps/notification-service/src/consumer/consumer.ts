@@ -13,7 +13,8 @@ const startConsumer = async () => {
 
             const html = emailService.generateEmailTemplates.emailVerificationMail(message.token,message.expiresAt);
 
-            await emailService.sendEmail(message.email,"Verify Your Email",html);
+            const repsonse = await emailService.sendEmail(message.email,"Verify Your Email",html);
+            if(repsonse) return repsonse;
         }
     );
 
@@ -24,7 +25,8 @@ const startConsumer = async () => {
 
             const html = emailService.generateEmailTemplates.passwordResetMail(message.token,message.expiresAt);
 
-            await emailService.sendEmail(message.email,"Reset Your Password",html);
+            const hello = await emailService.sendEmail(message.email,"Reset Your Password",html);
+            console.log(hello);
         }
     );
 }

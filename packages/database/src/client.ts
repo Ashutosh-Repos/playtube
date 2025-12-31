@@ -1,7 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-export * from "@prisma/client";
-export * from "@prisma/client";
+// export * from "@prisma/client"; // Moved to index.ts to reduce chaining warnings
 // export * from "./generated/prisma/models"; // Try without first, seemingly small file
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

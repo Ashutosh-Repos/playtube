@@ -166,6 +166,31 @@ enum PostType {
 }
 
 // =============================================================================
+// ADMIN REGULATION ENUMS (TRUST & SAFETY)
+// =============================================================================
+
+enum ChannelStatus {
+  ACTIVE
+  RESTRICTED   // Partial features disabled (e.g. no live streaming)
+  SUSPENDED    // All content hidden, no new uploads
+  TERMINATED   // Permanently banned (Channel is dead, User might be alive)
+}
+
+enum AdminContentStatus {
+  NORMAL
+  AGE_RESTRICTED     // 18+ forced
+  SENSITIVE_CONTENT  // Warning interstitial (suicide/graphic)
+  TAKEN_DOWN         // Removed for TOS violation
+  COPYRIGHT_BLOCKED  // Blocked in some/all regions
+}
+
+enum StrikeType {
+  WARNING             // 0 points, permanent record
+  COMMUNITY_GUIDELINE // Violence, Hate Speech, Spam
+  COPYRIGHT           // DMCA
+}
+
+// =============================================================================
 // USERS & AUTH (NextAuth v5 Compatible)
 // =============================================================================
 
@@ -201,7 +226,7 @@ model User {
 
   // NextAuth v5 relations
   accounts                Account[]
-  sessions                Session[]
+
   
   // Custom auth (for password-based auth)
   refreshTokens           RefreshToken[]
@@ -231,6 +256,10 @@ model User {
   reportsSubmitted        Report[]              @relation("Reporter")
   reportsReceived         Report[]              @relation("ReportedUser")
   reportsReviewed         Report[]              @relation("Reviewer")
+  
+  // Admin Regulation
+  strikesIssued           Strike[]              @relation("StrikeAdmin")
+  strikesReceived         Strike[]
 
   // Soft delete
   deletedAt               DateTime?
@@ -272,27 +301,6 @@ model Account {
   @@map("accounts")
 }
 
-/// NextAuth Session - stores active sessions (database strategy)
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  
-  // Device Tracking
-  ipAddress    String?
-  userAgent    String?  // Browser/OS info
-  lastActiveAt DateTime @default(now()) // For "Last seen" logic
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([expires])  // For cleanup of expired sessions
-  @@map("sessions")
-}
 
 /// NextAuth VerificationToken - for email verification/magic links
 model VerificationToken {
@@ -371,10 +379,15 @@ model Channel {
   bannerUrl       String?
   isVerified      Boolean  @default(false)
   
+  // Regulation (Trust & Safety)
+  status          ChannelStatus @default(ACTIVE)
+  featureFlags    Json?         // e.g. {"canLiveStream": false, "canUpload": true}
+  
   // Social links (YouTube-style)
   links           Json?    // [{"title": "Twitter", "url": "https://..."}]
   location        String?
   contactEmail    String?  // Business email (optional)
+  tags            String[] // [NEW] SEO/Discovery tags
   
   // Denormalized counters (updated by events)
   subscriberCount Int      @default(0)
@@ -390,11 +403,15 @@ model Channel {
   liveStreams  LiveStream[]
   subscribers  Subscription[] @relation("Channel")
   communityPosts CommunityPost[]   // Community tab posts
+  strikes      Strike[]            // Issued strikes
 
   @@index([userId])                     // Find all channels for a user
   @@index([subscriberCount(sort: Desc)])
   @@index([createdAt(sort: Desc)])  // New channels
   @@index([deletedAt])  // Filter out deleted channels
+  @@index([status])     // Fast feed filtering (Exclude Terminated)
+  @@index([featureFlags], type: Gin) // Fast capability checks
+  @@index([tags], type: Gin) // [NEW] Channel discovery via tags
   @@map("channels")
 }
 
@@ -439,6 +456,10 @@ model Video {
   visibility        VideoVisibility  @default(PRIVATE)
   scheduledAt       DateTime?
   publishedAt       DateTime?
+  
+  // Admin Regulation
+  adminStatus       AdminContentStatus @default(NORMAL)
+  adminNote         String?
   
   // Processing (ingest/transcoder)
   processingStatus  ProcessingStatus @default(PENDING)
@@ -601,6 +622,10 @@ model LiveStream {
   startedAt       DateTime?
   endedAt         DateTime?
   
+  // Admin Regulation
+  adminStatus     AdminContentStatus @default(NORMAL)
+  forcedEndedAt   DateTime?          // If Admin killed the stream
+  
   // Viewer metrics (real-time, may also store in Redis)
   peakViewers     Int              @default(0)
   currentViewers  Int              @default(0)
@@ -746,6 +771,7 @@ model UserInterest {
   @@unique([userId, interestType, interestId])
   @@index([userId, score(sort: Desc)])
   @@index([userId, interestType, score(sort: Desc)])
+  @@index([interestType, interestId, score(sort: Desc)]) // [NEW] Topic-based fan-out (Find fans of X)
   @@map("user_interests")
 }
 
@@ -826,6 +852,9 @@ model Comment {
   isPinned      Boolean       @default(false)
   isHearted     Boolean       @default(false)
   isEdited      Boolean       @default(false)
+  
+  // Admin Regulation
+  isAdminRemoved Boolean      @default(false)
   
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -1008,6 +1037,10 @@ model Report {
   liveStream   LiveStream? @relation("ReportedLiveStream", fields: [liveStreamId], references: [id], onDelete: Cascade)
   reviewedBy   User?       @relation("Reviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   
+  // Appeal Linkage
+  strikeId     String?
+  strike       Strike?     @relation("StrikeAppeal", fields: [strikeId], references: [id], onDelete: SetNull)
+  
   @@index([reporterId])
   @@index([videoId])
   @@index([commentId])
@@ -1022,6 +1055,7 @@ model Report {
   @@unique([reporterId, commentId])
   @@unique([reporterId, reportedUserId])
   @@unique([reporterId, liveStreamId])
+  @@index([strikeId])
   @@map("reports")
 }
 
@@ -1094,6 +1128,9 @@ model CommunityPost {
   content      String   @db.Text
   imageUrls    String[]
   
+  // Admin Regulation
+  adminStatus  AdminContentStatus @default(NORMAL)
+  
   // For polls
   pollOptions  Json?     // ["Option A", "Option B"]
   pollResults  Json?     // {"Option A": 100, "Option B": 200}
@@ -1117,4 +1154,49 @@ model CommunityPost {
   @@index([channelId, createdAt(sort: Desc)])  // Channel's posts
   @@index([deletedAt])
   @@map("community_posts")
+}
+
+// =============================================================================
+// STRIKES (The Record of Infractions)
+// =============================================================================
+
+model Strike {
+  id          String      @id @default(cuid())
+  
+  // Target (Explicit Relations for integrity)
+  channelId   String?
+  userId      String?     
+  
+  type        StrikeType
+  severity    Int         // 1, 2, or 3 (Termination)
+  
+  reason      String      @db.Text
+  internalNote String?    // "User was spamming links"
+  
+  // Context (What caused the strike?)
+  videoId     String?     
+  commentId   String?
+  postId      String?
+  
+  issuedAt    DateTime    @default(now())
+  expiresAt   DateTime?   // Strikes expire (e.g. 90 days)
+  
+  // Appeal / Revocation Status
+  appealed    Boolean     @default(false)
+  revokedAt   DateTime?   // If appeal accepted, strike is voided but kept for history
+  
+  // Admin who issued (SetNull if admin is deleted to preserve history)
+  adminId     String?
+  admin       User?       @relation("StrikeAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+  
+  channel     Channel?    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user        User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Inverse relation for Appeals
+  reports     Report[]    @relation("StrikeAppeal")
+  
+  @@index([channelId])
+  @@index([userId])
+  @@index([expiresAt]) // Critical for "Expired Strike Cleanup" job
+  @@map("strikes")
 }

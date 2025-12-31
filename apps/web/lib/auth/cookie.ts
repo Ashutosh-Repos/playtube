@@ -4,7 +4,7 @@ export const REFRESH_TOKEN = process.env.NODE_ENV === "production" ? "__Host-aut
 export const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // 30 Days
 export const ACCESS_MAX_AGE = 15 * 60; // 15 Minutes
 
-export const REFRESH_PATH = "/api/auth";
+export const REFRESH_PATH = "/";
 
 export const getCookieOptions = (type: "access" | "refresh") => {
   const isProd = process.env.NODE_ENV === "production";

@@ -65,30 +65,39 @@ export async function POST(request: Request) {
     }
 
     if (user.status === "SUSPENDED") {
-       // Check if suspension is over?
-       // Ideally we check suspendedUntil here too, or just block.
-       // For simplicity, let's block. Re-activation happens via Refresh or Admin.
-       // Actually, if we block login, they can't trigger 'refreshSession' logic for auto-activation!
-       // So we MUST check suspendedUntil here if we want auto-activation on Login.
-       if (user.suspendedUntil && new Date() > user.suspendedUntil) {
+        // CASE 1: Indefinite Suspension (No date set)
+        if (!user.suspendedUntil) {
+             return NextResponse.json(
+                { error: "Account Suspended", reason: user.suspendedReason },
+                { status: 403 }
+            );
+        }
+
+        // CASE 2: Timed Suspension
+        // Check if suspension time has passed
+        if (new Date() > user.suspendedUntil) {
            // Auto-activate
            await prisma.user.update({
                where: { id: user.id },
                data: { status: "ACTIVE", suspendedUntil: null, suspendedReason: null }
            });
            user.status = "ACTIVE"; // Update local var for session creation
-       } else {
+        } else {
+           // Still suspended
            return NextResponse.json(
                { error: "Account Suspended", reason: user.suspendedReason },
                { status: 403 }
            );
-       }
+        }
     }
 
     if (user.status === "PROVISIONED") {
       return NextResponse.json(
-        { error: "Email not verified. Please check your inbox." },
-        { status: 401 }
+        { 
+            error: "Email not verified. Redirecting...",
+            redirect: `/verify-email?email=${encodeURIComponent(user.email)}`
+        },
+        { status: 403 }
       );
     }
 

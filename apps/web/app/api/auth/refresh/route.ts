@@ -21,6 +21,7 @@ export async function POST(request: Request) {
   if (!result.success) {
     // Security: If refresh failed (e.g., reuse), clear potentially dangerous cookies
     cookieStore.delete(REFRESH_TOKEN);
+    cookieStore.delete(AUTH_TOKEN);
     return NextResponse.json({ error: result.error }, { status: 401 });
   }
 

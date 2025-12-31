@@ -8,7 +8,10 @@ const PUBLIC_PATHS = [
   "/register", 
   "/api/auth/login", 
   "/api/auth/register", 
-  "/api/auth/refresh"
+  "/api/auth/refresh",
+  "/verify-email",
+  "/api/auth/verify-email",
+  "/api/auth/verify-email/resend"
 ];
 
 // Asset paths to ignore
@@ -78,7 +81,7 @@ export async function middleware(request: NextRequest) {
       if (pathname.startsWith("/api")) {
           return NextResponse.json({ error: "Email Verification Required" }, { status: 403 });
       }
-      return NextResponse.json({ error: "Email Verification Required" }, { status: 403 });
+      return NextResponse.redirect(new URL(`/verify-email?email=${encodeURIComponent(payload.email || "")}`, request.url));
   }
 
   // 6. Enforce RBAC (Admin Routes)

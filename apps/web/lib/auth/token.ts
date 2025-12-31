@@ -5,6 +5,7 @@ import { SignJWT, jwtVerify, importPKCS8, importSPKI, JWTPayload } from "jose";
  */
 export interface AccessTokenPayload extends JWTPayload {
   sub: string; // User ID
+  email: string; // User Email
   role: string; // User Role
   status: string; // User Status (ACTIVE, BANNED, SUSPENDED, PROVISIONED)
   kid?: string; // Key ID

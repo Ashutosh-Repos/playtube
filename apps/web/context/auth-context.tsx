@@ -10,6 +10,8 @@ interface User {
   role: string;
 }
 
+// ... imports
+
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
@@ -21,77 +23,70 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+export function AuthProvider({ 
+    children, 
+    initialUser = null 
+}: { 
+    children: React.ReactNode; 
+    initialUser?: User | null;
+}) {
+  const [user, setUser] = useState<User | null>(initialUser);
+  const [accessToken, setAccessToken] = useState<string | null>(null); // We don't expose AT to client easily via server props unless we leak it.
+  // Actually, for client-side API calls, we might need AT. 
+  // But HttpOnly cookie handles it for Next.js API Routes.
+  // If we call external services directly from client, we need AT.
+  // Assuming we use API Routes as proxy, we don't need AT in memory.
+  // But the original context had specific logic for it.
+  // Let's keep it null for now, assuming cookies handle the auth.
+  
+  const [isLoading, setIsLoading] = useState(false); // No longer loading initially!
   const router = useRouter();
 
-  useEffect(() => {
-    // Attempt to restore session via refresh token on mount
-    refreshSession();
-  }, []);
-
-  const refreshSession = async () => {
-    try {
-      const res = await fetch("/api/auth/refresh", { method: "POST" });
-      if (res.ok) {
-        const data = await res.json();
-        setAccessToken(data.accessToken);
-        if (data.user) {
-          setUser(data.user);
-        }
-      } else {
-        setUser(null);
-        setAccessToken(null);
-      }
-    } catch (error) {
-      console.error(error);
-      setUser(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // We can still try to refresh if initialUser is null, to be safe? 
+  // No, if server says null, it's null.
+  
+  // Keep refreshSession for manual invocation if needed, but not on mount.
+  // No-op for now as we hydrate from server.
+  const refreshSession = async () => {};
 
   const login = async (credentials: any) => {
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(credentials),
-    });
+    const formData = new FormData();
+    formData.append("email", credentials.email);
+    formData.append("password", credentials.password);
+    
+    // Server Action
+    const { loginAction } = await import("@/app/actions/auth");
+    const result = await loginAction({}, formData);
 
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || "Login failed");
+    if (result?.error) {
+      throw new Error(result.error);
     }
-
-    const data = await res.json();
-    setAccessToken(data.accessToken);
-    setUser(data.user);
-    router.push("/"); // Redirect to dashboard
+    // Action handles redirect.
   };
 
   const register = async (credentials: any) => {
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(credentials),
-    });
+    const formData = new FormData();
+    formData.append("email", credentials.email);
+    formData.append("password", credentials.password);
+    formData.append("name", credentials.name || "");
 
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || "Registration failed");
+    const { registerAction } = await import("@/app/actions/auth");
+    const result = await registerAction({}, formData);
+
+    if (result?.error) {
+      throw new Error(result.error);
     }
-    
-    // Auto login after register? Or redirect to login.
-    router.push("/login"); 
+    // Action return success, likely we should redirect manually if action didn't
+    if (result?.success) {
+         router.push(`/verify-email?email=${encodeURIComponent(credentials.email)}`);
+    }
   };
 
   const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    const { logoutAction } = await import("@/app/actions/auth");
+    await logoutAction(); // Handles redirect
     setUser(null);
     setAccessToken(null);
-    router.push("/login");
   };
 
   return (

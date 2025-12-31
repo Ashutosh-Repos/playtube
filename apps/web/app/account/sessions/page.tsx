@@ -16,10 +16,10 @@ import { useRouter } from "next/navigation";
 
 interface Session {
   id: string;
-  userAgent: string;
-  ipAddress: string;
-  createdAt: string;
-  lastUsedAt: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: Date;
+  lastUsedAt: Date;
   isCurrent: boolean;
 }
 
@@ -30,41 +30,58 @@ export default function SessionsPage() {
   const { logout } = useAuth();
   const router = useRouter();
 
-  const fetchSessions = async () => {
-    try {
-      const res = await fetch("/api/auth/sessions");
-      if (res.status === 401) {
-          // Token invalid/revoked? force logout
-          await logout();
-          return;
-      }
-      if (!res.ok) throw new Error("Failed to load sessions");
-      const data = await res.json();
-      setSessions(data.sessions);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    (async () => {
+        try {
+            const { getSessionsAction } = await import("@/app/actions/auth");
+            const result = await getSessionsAction();
+            if (result.error) throw new Error(result.error);
+            if (result.sessions) setSessions(result.sessions);
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setLoading(false);
+        }
+    })();
+  }, []);
+
+  // ... existing revokeSession ... 
+  
+  // (Keep revokeSession and revokeAll the same)
+  // I must be careful not to delete them if I replace the whole file or chunk.
+  // The tool replaces contiguous block.
+  // I need to insert `useState` at top and update `useEffect` and `render`.
+  // Wait, I can't easily inject `useState` with a single replace if I target `useEffect`.
+  // I'll replace the top part of the component.
+  
+  // Actually, let's just use `console.log` for now to avoid UI clutter?
+  // But user can't see console easily in screenshot. 
+  // I will render it.
+  
+  // I will assume I can replace the start of the component up to useEffect end.
+  
+  // ...
+
 
   const revokeSession = async (id: string, isCurrent: boolean) => {
     if (!confirm(isCurrent ? "This will log you out immediately. Continue?" : "Are you sure you want to log out this device?")) return;
     
     if (isCurrent) {
-        // If revoking self, just use the logout flow which cleans everything
         await logout();
         return;
     }
 
     try {
-      const res = await fetch("/api/auth/sessions", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (!res.ok) throw new Error("Failed to revoke session");
+      const { revokeSessionByIdAction } = await import("@/app/actions/auth");
+      const res = await revokeSessionByIdAction(id);
       
+      if (res.error) throw new Error(res.error);
+      
+      if (res.isCurrent) {
+          router.push("/login"); // or call logout() to be safe
+          return;
+      }
+
       // Optimistic update
       setSessions((prev) => prev.filter((s) => s.id !== id));
     } catch (err: any) {
@@ -74,20 +91,25 @@ export default function SessionsPage() {
 
   const revokeAll = async () => {
      if (!confirm("Sign out of all other devices?")) return;
-     // Note: Implementing 'Revoke All' would require a new API endpoint or loop. 
-     // For now, let's keep it simple.
      alert("Feature coming soon: Revoke All");
   };
-
-  useEffect(() => {
-    fetchSessions();
-  }, []);
-
+  
+  // Loading state remains content below...
   if (loading) return (
     <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
     </div>
   );
+
+  if (error && error !== "Unauthorized") {
+      return (
+         <div className="max-w-3xl mx-auto py-12 px-6">
+            <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                {error}
+            </div>
+         </div>
+      );
+  }
 
   return (
     <div className="max-w-3xl mx-auto py-12 px-6">
@@ -103,12 +125,6 @@ export default function SessionsPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
-          {error}
-        </div>
-      )}
-
       <div className="space-y-4">
         {sessions.length === 0 ? (
           <div className="p-12 border-2 border-dashed border-gray-200 dark:border-zinc-700 rounded-xl text-center">
@@ -117,7 +133,7 @@ export default function SessionsPage() {
         ) : (
           sessions.map((session) => {
             const isCurrent = session.isCurrent;
-            const { icon: DeviceIcon, label: deviceLabel } = getDeviceIcon(session.userAgent);
+            const { icon: DeviceIcon, label: deviceLabel } = getDeviceIcon(session.userAgent || "Unknown Device");
             
             return (
                 <div
@@ -150,7 +166,7 @@ export default function SessionsPage() {
                         <div className="space-y-1 text-sm text-gray-500 dark:text-gray-400">
                             <div className="flex items-center gap-2">
                                 <MapPin className="w-3.5 h-3.5" />
-                                <span>{session.ipAddress}</span>
+                                <span>{session.ipAddress || "Unknown IP"}</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <Clock className="w-3.5 h-3.5" />

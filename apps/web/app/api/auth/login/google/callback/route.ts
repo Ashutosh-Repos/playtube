@@ -31,6 +31,10 @@ export async function GET(request: Request) {
     });
     const googleUser: GoogleUser = await response.json();
 
+    if (!googleUser.email_verified) {
+        return NextResponse.json({ error: "Google account email is not verified." }, { status: 400 });
+    }
+
     // 1. Check if Account exists
     const existingAccount = await prisma.account.findUnique({
       where: {
@@ -112,11 +116,15 @@ export async function GET(request: Request) {
     cookieStore.set(REFRESH_TOKEN, refreshToken, getCookieOptions("refresh"));
     cookieStore.set(AUTH_TOKEN, accessToken, getCookieOptions("access"));
     
+    // Get Redirect Path
+    const redirectPath = cookieStore.get("google_oauth_redirect")?.value || "/";
+    
     // Clean up OAuth cookies
     cookieStore.delete("google_oauth_state");
     cookieStore.delete("google_code_verifier");
+    cookieStore.delete("google_oauth_redirect");
 
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL(redirectPath, request.url));
   } catch (e) {
     if (e instanceof OAuth2RequestError) {
       // Invalid code

@@ -1,4 +1,5 @@
-import bcrypt from "bcryptjs";
+import "server-only";
+import { hash, compare } from "bcryptjs";
 
 /**
  * Hashes a plain text password using bcrypt.
@@ -7,7 +8,7 @@ import bcrypt from "bcryptjs";
  */
 export const hashPassword = async (plain: string): Promise<string> => {
   // Salt rounds: 12 (Good balance of security and performance)
-  return await bcrypt.hash(plain, 12);
+  return await hash(plain, 12);
 };
 
 /**
@@ -20,5 +21,5 @@ export const verifyPassword = async (
   plain: string,
   hash: string
 ): Promise<boolean> => {
-  return await bcrypt.compare(plain, hash);
+  return await compare(plain, hash);
 };

@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 
-export function GoogleSignIn() {
+export function GoogleSignIn({ redirectTo = "/" }: { redirectTo?: string }) {
+  // Ensure we don't pass "/" as a param if it's default to avoid query clutter, 
+  // but explicit is fine.
+  const href = `/api/auth/login/google?redirect=${encodeURIComponent(redirectTo)}`;
+  
   return (
     <div className="mt-4">
       <Link
-        href="/api/auth/login/google"
+        href={href}
         className="flex w-full items-center justify-center gap-3 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-300 dark:hover:bg-zinc-800"
       >
         <svg className="h-5 w-5" aria-hidden="true" viewBox="0 0 24 24">
