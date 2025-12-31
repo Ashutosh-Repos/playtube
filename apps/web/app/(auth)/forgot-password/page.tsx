@@ -2,11 +2,12 @@
 
 import { z } from "zod";
 import Link from "next/link";
-import { registerAction } from "@/app/actions/auth";
-import { registerSchema } from "@/lib/auth/schemas";
+import { requestPasswordResetAction } from "@/app/actions/auth";
+import { requestResetSchema } from "@/lib/auth/schemas";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useState, useTransition } from "react";
+import { ArrowRight, CheckCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,13 +20,10 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { CardBody, CardContainer, CardItem } from "@/components/ui/3d-card";
-import { Separator } from "@/components/ui/separator";
 
-
-
-export default function RegisterPage() {
+export default function ForgotPasswordPage() {
   const [isSuccess, setIsSuccess] = useState(false);
-  
+
   if (isSuccess) {
       return (
         <CardContainer className="inter-var w-max h-max p-6">
@@ -36,6 +34,13 @@ export default function RegisterPage() {
            >
              <></>
            </CardItem>
+           
+           <CardItem translateZ="50" className="w-full flex justify-center mb-6">
+                <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center border border-green-500/50">
+                    <CheckCircle className="w-10 h-10 text-green-400" />
+                </div>
+            </CardItem>
+
            <CardItem
              translateZ="50"
              className="text-2xl font-bold text-zinc-600 dark:text-white w-full flex items-center justify-center text-center"
@@ -47,7 +52,7 @@ export default function RegisterPage() {
              translateZ="60"
              className="text-zinc-500 text-sm mt-4 dark:text-zinc-300 w-full text-center"
            >
-             We have sent a verification link to your email address.
+             If an account exists with that email, we have sent a password reset link.
            </CardItem>
            <CardItem translateZ="80" className="w-full mt-8 flex justify-center">
              <Link href="/login" className="px-6 py-2 rounded-xl bg-black dark:bg-white dark:text-black text-white text-xs font-bold">
@@ -72,17 +77,17 @@ export default function RegisterPage() {
           translateZ="50"
           className="text-2xl font-bold text-zinc-600 dark:text-white w-full flex items-center justify-center"
         >
-          Create Account
+          Forgot Password
         </CardItem>
         <CardItem
           as="p"
           translateZ="60"
-          className="text-zinc-500 text-xs mt-2 dark:text-zinc-300 w-full flex items-center justify-center"
+          className="text-zinc-500 text-xs mt-2 dark:text-zinc-300 w-full flex items-center justify-center text-center"
         >
-          Enter your details to create a new account
+          Enter your email and we'll send you a recovery link
         </CardItem>
         <CardItem translateZ="100" className="w-full mt-4">
-         <RegisterForm onSuccess={() => setIsSuccess(true)} />
+         <ForgotPasswordForm onSuccess={() => setIsSuccess(true)} />
         </CardItem>
         
         <div className="flex justify-center items-center mt-6">
@@ -90,7 +95,7 @@ export default function RegisterPage() {
             translateZ={40}
             className="text-sm text-zinc-500 dark:text-zinc-400"
           >
-            Already have an account?{" "}
+            Remember your password?{" "}
             <Link href="/login" className="font-bold text-zinc-700 dark:text-zinc-200 hover:underline">
               Sign in
             </Link>
@@ -99,27 +104,22 @@ export default function RegisterPage() {
       </CardBody>
     </CardContainer>
   );
-  
 }
 
-function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
+function ForgotPasswordForm({ onSuccess }: { onSuccess: () => void }) {
   const [isPending, startTransition] = useTransition();
 
-  const form = useForm<z.infer<typeof registerSchema>>({
-    resolver: zodResolver(registerSchema),
+  const form = useForm<z.infer<typeof requestResetSchema>>({
+    resolver: zodResolver(requestResetSchema),
     defaultValues: {
-      name: "",
       email: "",
-      password: "",
     },
   });
 
-  const onSubmit = async (values: z.infer<typeof registerSchema>) => {
+  const onSubmit = async (values: z.infer<typeof requestResetSchema>) => {
     startTransition(async () => {
-      const result = await registerAction({ 
-        name: values.name,
-        email: values.email, 
-        password: values.password, 
+      const result = await requestPasswordResetAction({ 
+        email: values.email 
       });
 
       if (result?.error) {
@@ -135,38 +135,12 @@ function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Name</FormLabel>
-              <FormControl>
-                <Input placeholder="John Doe" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
           name="email"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
                 <Input placeholder="name@example.com" {...field} type="email" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <Input placeholder="••••••••" {...field} type="password" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -179,8 +153,12 @@ function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
             </div>
         )}
         <div className="w-full h-max bg-transparent flex items-center justify-center pt-2">
-          <Button type="submit" className="w-max px-8" disabled={isPending}>
-            {isPending ? "Creating account..." : "Sign Up"}
+          <Button type="submit" className="w-max px-8 group" disabled={isPending}>
+            {isPending ? "Sending link..." : (
+               <>
+                 Send Reset Link <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-0.5 transition-transform" />
+               </>
+            )}
           </Button>
         </div>
       </form>

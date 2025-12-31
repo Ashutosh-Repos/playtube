@@ -3,6 +3,7 @@
 import { z } from "zod";
 import Link from "next/link";
 import { loginAction } from "@/app/actions/auth";
+import { loginSchema } from "@/lib/auth/schemas";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useTransition } from "react";
@@ -21,10 +22,7 @@ import { Input } from "@/components/ui/input";
 import { CardBody, CardContainer, CardItem } from "@/components/ui/3d-card";
 import { Separator } from "@/components/ui/separator";
 
-const loginSchema = z.object({
-  email: z.string().email({ message: "Invalid email address" }),
-  password: z.string().min(1, "Password is required"),
-});
+
 
 export default function LoginPage() {
   return (

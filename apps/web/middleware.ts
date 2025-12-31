@@ -9,7 +9,9 @@ const PUBLIC_PATHS = [
   "/api/auth/login", // Required for Google OAuth
   "/api/auth/refresh-session", // Allow refresh logic to run!
   "/verify-email",
-  "/api/auth/verify-email/resend"
+  "/api/auth/verify-email/resend",
+  "/forgot-password",
+  "/reset-password"
 ];
 
 // Asset paths to ignore

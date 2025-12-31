@@ -12,16 +12,13 @@ import { redirect } from "next/navigation";
 import { publishMessage, EVENTS, EXCHANGES } from "@repo/events";
 import { randomBytes, createHash, randomUUID } from "crypto";
 
-const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(1, "Password is required"),
-});
-
-const registerSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  name: z.string().min(2, "Name must be at least 2 characters"),
-});
+import { 
+  loginSchema, 
+  registerSchema, 
+  requestResetSchema, 
+  resetPasswordSchema, 
+  changePasswordSchema 
+} from "@/lib/auth/schemas";
 
 export type AuthState = {
   error?: string;
@@ -118,10 +115,8 @@ export async function loginAction(data: z.infer<typeof loginSchema> & { redirect
   redirect(safeRedirectTo);
 }
 
-export async function registerAction(prevState: AuthState, formData: FormData): Promise<AuthState> {
-  const name = formData.get("name") as string;
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
+export async function registerAction(data: z.infer<typeof registerSchema>): Promise<AuthState> {
+  const { name, email, password } = data;
 
   const validated = registerSchema.safeParse({ name, email, password });
   if (!validated.success) {
@@ -221,10 +216,7 @@ export async function logoutAction() {
 /*                              Password Management                           */
 /* -------------------------------------------------------------------------- */
 
-const changePasswordSchema = z.object({
-  currentPassword: z.string(),
-  newPassword: z.string().min(8, "Password must be at least 8 characters"),
-});
+
 
 export async function changePasswordAction(prevState: AuthState, formData: FormData): Promise<AuthState> {
   const currentPassword = formData.get("currentPassword") as string;
@@ -269,10 +261,10 @@ export async function changePasswordAction(prevState: AuthState, formData: FormD
   redirect("/login?message=PasswordChanged");
 }
 
-const requestResetSchema = z.object({ email: z.string().email() });
 
-export async function requestPasswordResetAction(prevState: AuthState, formData: FormData): Promise<AuthState> {
-  const email = formData.get("email") as string;
+
+export async function requestPasswordResetAction(data: z.infer<typeof requestResetSchema>): Promise<AuthState> {
+  const { email } = data;
   const validated = requestResetSchema.safeParse({ email });
   
   if (!validated.success) return { error: validated.error.errors[0].message };
@@ -302,14 +294,10 @@ export async function requestPasswordResetAction(prevState: AuthState, formData:
   }
 }
 
-const resetPasswordSchema = z.object({
-  token: z.string(),
-  newPassword: z.string().min(8, "Password must be at least 8 characters"),
-});
 
-export async function resetPasswordAction(prevState: AuthState, formData: FormData): Promise<AuthState> {
-  const token = formData.get("token") as string;
-  const newPassword = formData.get("newPassword") as string;
+
+export async function resetPasswordAction(data: z.infer<typeof resetPasswordSchema>): Promise<AuthState> {
+  const { token, newPassword } = data;
 
   const validated = resetPasswordSchema.safeParse({ token, newPassword });
   if (!validated.success) return { error: validated.error.errors[0].message };

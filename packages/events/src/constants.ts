@@ -15,7 +15,8 @@ export const EVENTS = {
 } as const;
 
 export const QUEUES = {
-  EMAIL_QUEUE: "email-queue",
+  EMAIL_VERIFICATION_QUEUE: "email-verification-queue",
+  PASSWORD_RESET_QUEUE: "password-reset-queue",
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

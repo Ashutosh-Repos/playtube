@@ -17,7 +17,7 @@ export class EmailService {
         },
 
         passwordResetMail: (token: string, expireAt:string) => {
-            const url = `${env.APP_URL}/password-reset?token=${token}`;
+            const url = `${env.APP_URL}/reset-password?token=${token}`;
             return `
             <h1>Reset Your Password</h1>
             <p>Click the link below to reset your password:</p>

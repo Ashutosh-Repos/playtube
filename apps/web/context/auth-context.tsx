@@ -64,13 +64,12 @@ export function AuthProvider({
   };
 
   const register = async (credentials: any) => {
-    const formData = new FormData();
-    formData.append("email", credentials.email);
-    formData.append("password", credentials.password);
-    formData.append("name", credentials.name || "");
-
     const { registerAction } = await import("@/app/actions/auth");
-    const result = await registerAction({}, formData);
+    const result = await registerAction({
+      email: credentials.email,
+      password: credentials.password,
+      name: credentials.name || ""
+    });
 
     if (result?.error) {
       throw new Error(result.error);
