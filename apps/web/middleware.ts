@@ -6,11 +6,9 @@ import { verifyAccessToken } from "./lib/auth/token";
 const PUBLIC_PATHS = [
   "/login", 
   "/register", 
-  "/api/auth/login", 
-  "/api/auth/register", 
-  "/api/auth/refresh",
+  "/api/auth/login", // Required for Google OAuth
+  "/api/auth/refresh-session", // Allow refresh logic to run!
   "/verify-email",
-  "/api/auth/verify-email",
   "/api/auth/verify-email/resend"
 ];
 
@@ -34,28 +32,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 3. Auth Check
-  // We verify the 'auth_token' (Access Token) cookie.
-  // If it's missing, the client might try to refresh via proper flows, 
-  // but for protected API routes or Pages, we block.
-  
+  // 3. Auth Check & Verification
   const accessToken = request.cookies.get("auth_token")?.value;
+  let payload = accessToken ? await verifyAccessToken(accessToken) : null;
 
-  if (!accessToken) {
-    // If it's an API request, return 401
+  if (!accessToken || !payload) {
+    // Check if we have a refresh token to attempt revival
+    const refreshToken = request.cookies.get(process.env.NODE_ENV === "production" ? "__Host-auth_refresh" : "auth_refresh")?.value;
+
+    if (refreshToken) {
+       const url = new URL("/api/auth/refresh-session", request.url);
+       url.searchParams.set("redirect", pathname);
+       return NextResponse.redirect(url);
+    }
+    
     if (pathname.startsWith("/api")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    // Otherwise redirect to login
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  // 4. Verify Token (Stateless)
-  const payload = await verifyAccessToken(accessToken);
-
-  if (!payload) {
-    if (pathname.startsWith("/api")) {
-      return NextResponse.json({ error: "Invalid Token" }, { status: 401 });
     }
     return NextResponse.redirect(new URL("/login", request.url));
   }

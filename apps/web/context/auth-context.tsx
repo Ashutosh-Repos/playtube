@@ -50,13 +50,12 @@ export function AuthProvider({
   const refreshSession = async () => {};
 
   const login = async (credentials: any) => {
-    const formData = new FormData();
-    formData.append("email", credentials.email);
-    formData.append("password", credentials.password);
-    
     // Server Action
     const { loginAction } = await import("@/app/actions/auth");
-    const result = await loginAction({}, formData);
+    const result = await loginAction({
+        email: credentials.email, 
+        password: credentials.password 
+    });
 
     if (result?.error) {
       throw new Error(result.error);

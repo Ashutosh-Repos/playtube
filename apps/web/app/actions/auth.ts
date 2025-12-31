@@ -29,14 +29,13 @@ export type AuthState = {
   message?: string;
 };
 
-export async function loginAction(prevState: AuthState, formData: FormData): Promise<AuthState> {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-  let redirectTo = (formData.get("redirectTo") as string) || "/";
+export async function loginAction(data: z.infer<typeof loginSchema> & { redirectTo?: string }): Promise<AuthState> {
+  const { email, password, redirectTo = "/" } = data;
   
   // Prevent Open Redirects
-  if (!redirectTo.startsWith("/") || redirectTo.startsWith("//")) {
-      redirectTo = "/";
+  let safeRedirectTo = redirectTo;
+  if (!safeRedirectTo.startsWith("/") || safeRedirectTo.startsWith("//")) {
+      safeRedirectTo = "/";
   }
 
   // 1. Validation
@@ -116,7 +115,7 @@ export async function loginAction(prevState: AuthState, formData: FormData): Pro
     return { error: "Internal Server Error" };
   }
 
-  redirect(redirectTo);
+  redirect(safeRedirectTo);
 }
 
 export async function registerAction(prevState: AuthState, formData: FormData): Promise<AuthState> {
@@ -419,7 +418,6 @@ export async function resendVerificationAction(prevState: AuthState, formData: F
 
 export async function getSessionsAction() {
   try {
-    const { validateSession } = await import("@/lib/auth/session-server");
     const payload = await validateSession();
 
     if (!payload) return { error: "Unauthorized" };
@@ -462,7 +460,6 @@ export async function getSessionsAction() {
 
 export async function revokeSessionByIdAction(sessionId: string) {
   try {
-    const { validateSession } = await import("@/lib/auth/session-server");
     const payload = await validateSession();
 
     if (!payload) return { error: "Unauthorized" };

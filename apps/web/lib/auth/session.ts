@@ -261,6 +261,32 @@ export const refreshSession = async (
   // The first `validateSession` call will fetch from DB and cache it.
   // This avoids the complexity of fetching the ID back from transaction.
 
+  // --- LAZY CLEANUP ---
+  // Delete revoked/expired tokens for this user older than 7 days.
+  // We do not await this, letting it run in background (fire-and-forget logic for now, 
+  // though Vercel might kill it, it's safer than blocking response).
+  // Ideally use `waitUntil` if available.
+  const cleanup = async () => {
+      try {
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          
+          await prisma.refreshToken.deleteMany({
+              where: {
+                  userId: tokenRecord.userId,
+                  OR: [
+                      { revokedAt: { lt: sevenDaysAgo } }, // Revoked > 7 days ago
+                      { expiresAt: { lt: sevenDaysAgo } }  // Expired > 7 days ago
+                  ]
+              }
+          });
+      } catch (e) {
+          console.error("Token Cleanup Error", e);
+      }
+  };
+  cleanup(); // Trigger without await
+  // --------------------
+
   return { 
     success: true, 
     refreshToken: newRefreshToken, 

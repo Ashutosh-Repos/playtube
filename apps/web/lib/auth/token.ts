@@ -12,6 +12,7 @@ export interface AccessTokenPayload extends JWTPayload {
 }
 
 import { env } from "@repo/env";
+import { ACCESS_MAX_AGE } from "./cookie";
 
 // Load keys from Environment Variables (Base64 encoded)
 const PRIVATE_KEY_B64 = env.AUTH_PRIVATE_KEY;
@@ -64,7 +65,7 @@ export const signAccessToken = async (
   return await new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "RS256", kid })
     .setIssuedAt()
-    .setExpirationTime("15m") // 15 minutes
+    .setExpirationTime(`${ACCESS_MAX_AGE}s`) // Syncs with cookie expiry
     .sign(priv);
 };
 

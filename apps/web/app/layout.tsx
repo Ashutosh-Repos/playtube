@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 
 import { AuthProvider } from "@/context/auth-context";
 import { validateSession } from "@/lib/auth/session-server";
+import { ThemeProvider } from "@/components/theme-provider";
 
 // ... existing imports
 
@@ -51,11 +52,18 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider initialUser={user}>{children}</AuthProvider>
+        <AuthProvider initialUser={user}>
+          <ThemeProvider attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange>
+            {children}
+          </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );

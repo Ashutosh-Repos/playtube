@@ -4,9 +4,6 @@ import { prisma } from "@repo/database";
 import { cookies } from "next/headers";
 import { verifyAccessToken } from "@/lib/auth/token";
 
-
-
-
 const updateProfileSchema = z.object({
   name: z.string().min(2).max(50).optional(),
   bio: z.string().max(500).optional(),
