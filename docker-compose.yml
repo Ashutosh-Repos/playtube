@@ -68,8 +68,7 @@ services:
       mc anonymous set download myminio/play-videos &&
       echo 'Configuring Webhook...' &&
       mc admin config set myminio notify_webhook:1 endpoint='http://host.docker.internal:4003/internal/s3-events' auth_token='secret_webhook_token' queue_limit='1000' &&
-      mc admin service restart myminio &&
-      echo 'Waiting for restart...' &&
+      echo 'Waiting for confirmation...' &&
       sleep 5 &&
       echo 'Adding bucket event notification...' &&
       mc event add --ignore-existing myminio/play-videos arn:minio:sqs::1:webhook --event put --suffix .mp4 &&

@@ -56,6 +56,22 @@ export function useUploadSync() {
              if (video && video.processingStatus === 'FAILED' && upload.status !== 'error') {
                  updateStatus(upload.id, 'error', video.processingError || "Server processing failed");
              }
+
+             // Reconnect WS if processing
+             if (video && video.processingStatus === 'PROCESSING') {
+                 // Lazy import to avoid circular dependency issues if any, or just direct
+                 const { uploadManager } = await import('@/lib/upload-manager');
+                 uploadManager.connectWebSocket(upload.id);
+             }
+
+             // Detect Interrupted Uploads
+             // If backend is still waiting for file, but local store thinks we are 'uploading'
+             // And we haven't seen an update in > 1 minute (covers slow connections vs dead zombies)
+             // This also protects multi-tab usage: if another tab is uploading, lastUpdated will be fresh.
+             const isStale = (Date.now() - (upload.lastUpdated || upload.startedAt)) > 60 * 1000;
+             if (video && video.processingStatus === 'WAITING_FOR_UPLOAD' && upload.status === 'uploading' && isStale) {
+                 updateStatus(upload.id, 'error', "Upload interrupted. Please retry.");
+             }
           }
         } catch (e) {
             console.error(`[Sync] Unexpected error checking ${upload.id}`, e);

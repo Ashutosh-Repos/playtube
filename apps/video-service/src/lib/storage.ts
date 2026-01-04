@@ -92,10 +92,19 @@ export function getFileUrl(objectKey: string | null): string | null {
   const protocol = config.minio.useSSL === "true" ? "https" : "http";
   let host = config.minio.endpoint || "localhost";
   
-  // Strip existing protocol if present to avoid double-prefix
+  // Strip existing protocol if present
   host = host.replace(/^https?:\/\//, '');
 
-  const port = config.minio.port;
+  // Strip trailing slash
+  if (host.endsWith('/')) host = host.slice(0, -1);
+
+  const port = config.minio.port || "9000";
+  
+  // If host already contains a port (or is an IP with port), don't append it again
+  if (host.includes(':')) {
+       return `${protocol}://${host}/${BUCKET_NAME}/${objectKey}`;
+  }
+
   return `${protocol}://${host}:${port}/${BUCKET_NAME}/${objectKey}`;
 }
 

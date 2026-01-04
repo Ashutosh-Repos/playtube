@@ -18,6 +18,7 @@ export interface UploadItem {
   error?: string;
   thumbnailUrl?: string;
   startedAt: number;
+  lastUpdated: number;
 }
 
 interface UploadState {
@@ -63,6 +64,7 @@ export const useUploadStore = create<UploadState>()(
               uploadUrl,
               wsUrl,
               startedAt: Date.now(),
+              lastUpdated: Date.now(),
             },
           },
           isMinimized: false, // Auto-expand on new upload
@@ -75,7 +77,7 @@ export const useUploadStore = create<UploadState>()(
           return {
             uploads: {
               ...state.uploads,
-              [id]: { ...item, progress },
+              [id]: { ...item, progress, lastUpdated: Date.now() },
             },
           };
         }),
@@ -87,7 +89,7 @@ export const useUploadStore = create<UploadState>()(
           return {
             uploads: {
               ...state.uploads,
-              [id]: { ...item, processingProgress: progress },
+              [id]: { ...item, processingProgress: progress, lastUpdated: Date.now() },
             },
           };
         }),
@@ -99,7 +101,7 @@ export const useUploadStore = create<UploadState>()(
              return {
                  uploads: {
                      ...state.uploads,
-                     [id]: { ...item, thumbnailUrl: url }
+                     [id]: { ...item, thumbnailUrl: url, lastUpdated: Date.now() }
                  }
              }
         }),
@@ -114,7 +116,8 @@ export const useUploadStore = create<UploadState>()(
               [id]: { 
                 ...item, 
                 status, 
-                error: error || undefined 
+                error: error || undefined,
+                lastUpdated: Date.now()
               },
             },
           };

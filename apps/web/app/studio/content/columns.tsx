@@ -40,12 +40,13 @@ export const columns: ColumnDef<Video>[] = [
         <div className="flex items-start gap-4 min-w-[300px]">
           <div className="h-16 w-28 bg-neutral-200 dark:bg-neutral-800 rounded shrink-0 relative overflow-hidden group">
             {video.thumbnailUrl ? (
-              // Use standard img tag if URL is messy or using protocols next/image disslikes
-              // The replace fixes double-protocol bugs from legacy data
-              <img
-                src={video.thumbnailUrl.replace('http://http://', 'http://').replace('https://https://', 'https://')}
+              <Image
+                src={video.thumbnailUrl}
                 alt={video.title}
-                className="object-cover w-full h-full"
+                fill
+                className="object-cover"
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                unoptimized
               />
             ) : (
                 <div className="absolute inset-0 flex items-center justify-center bg-neutral-100 dark:bg-neutral-800 text-xs text-muted-foreground">

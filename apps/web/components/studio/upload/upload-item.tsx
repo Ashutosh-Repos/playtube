@@ -33,10 +33,13 @@ export function UploadItem({ item }: Props) {
                    // Use standard img tag if URL is messy to avoid Next.js Image strictness
                    // or if it's a blob/localhost that might not match remotePatterns perfectly yet.
                    // The replace fixes the double-protocol bug from legacy data.
-                   <img 
-                     src={item.thumbnailUrl.replace('http://http://', 'http://').replace('https://https://', 'https://')} 
+                   <Image 
+                     src={item.thumbnailUrl}
                      alt={item.file.name} 
-                     className="object-cover w-full h-full"
+                     fill
+                     className="object-cover"
+                     sizes="100px"
+                     unoptimized
                    />
                 ) : (
                    <FileVideo className="h-6 w-6 text-neutral-400" />

@@ -156,8 +156,8 @@ async function handleThumbnails(payload: TranscodeThumbnailsEvent): Promise<void
   await prisma.video.update({
     where: { id: videoId },
     data: { 
-      thumbnailOptions, 
-      thumbnailUrl: thumbnailOptions[0], 
+      thumbnailOptions: thumbnails, 
+      thumbnailUrl: thumbnails[0], 
     },
   });
 
@@ -175,15 +175,19 @@ async function handleCompleted(payload: TranscodeCompletedEvent): Promise<void> 
 
   if (!video || video.deletedAt || video.processingStatus === "READY") return;
 
+  const fullHlsUrl = getFileUrl(hlsPlaylistUrl);
+  const fullThumbnails = thumbnailOptions.map(t => getFileUrl(t)).filter((t): t is string => t !== null);
+  const fullSprite = previewSprite ? getFileUrl(previewSprite) : null;
+
   await prisma.video.update({
     where: { id: videoId },
     data: {
       processingStatus: "READY",
       processingProgress: 100,
-      hlsPlaylistUrl,
-      thumbnailUrl: thumbnailOptions[0],
-      thumbnailOptions,
-      previewSprite,
+      hlsPlaylistUrl: fullHlsUrl,
+      thumbnailUrl: fullThumbnails[0],
+      thumbnailOptions: fullThumbnails,
+      previewSprite: fullSprite,
       duration,
       width,
       height,
@@ -191,10 +195,7 @@ async function handleCompleted(payload: TranscodeCompletedEvent): Promise<void> 
       resolutions,
     },
   });
-  console.log(`[Pipeline] ✅ Video ${videoId} marked as READY in DB`);
 
-  const fullHlsUrl = getFileUrl(hlsPlaylistUrl);
-  const fullThumbnails = thumbnailOptions.map(t => getFileUrl(t)).filter((t): t is string => t !== null);
 
   await cacheVideoStatus(videoId, {
     status: "ready",

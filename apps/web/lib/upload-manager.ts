@@ -69,7 +69,7 @@ class UploadManager {
       this.startUpload(videoId, file, uploadUrl, wsUrl);
   }
 
-  private connectWebSocket(videoId: string) {
+  public connectWebSocket(videoId: string) {
     const store = useUploadStore.getState();
     const item = store.uploads[videoId];
     if (!item?.wsUrl) return;
