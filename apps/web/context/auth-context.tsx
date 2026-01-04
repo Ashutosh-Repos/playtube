@@ -1,24 +1,20 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { logoutAction, getCurrentUserAction } from "@/app/actions/auth";
 
-interface User {
+export interface User {
   id: string;
   email: string;
-  name?: string;
   role: string;
+  status: string;
 }
-
-// ... imports
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  accessToken: string | null;
-  login: (data: any) => Promise<void>;
-  register: (data: any) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,70 +27,44 @@ export function AuthProvider({
     initialUser?: User | null;
 }) {
   const [user, setUser] = useState<User | null>(initialUser);
-  const [accessToken, setAccessToken] = useState<string | null>(null); // We don't expose AT to client easily via server props unless we leak it.
-  // Actually, for client-side API calls, we might need AT. 
-  // But HttpOnly cookie handles it for Next.js API Routes.
-  // If we call external services directly from client, we need AT.
-  // Assuming we use API Routes as proxy, we don't need AT in memory.
-  // But the original context had specific logic for it.
-  // Let's keep it null for now, assuming cookies handle the auth.
-  
-  const [isLoading, setIsLoading] = useState(false); // No longer loading initially!
-  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
 
-  // We can still try to refresh if initialUser is null, to be safe? 
-  // No, if server says null, it's null.
-  
-  // Keep refreshSession for manual invocation if needed, but not on mount.
-  // No-op for now as we hydrate from server.
-  const refreshSession = async () => {};
+  // Sync state with server-provided prop on navigation/redirects
+  useEffect(() => {
+    setUser(initialUser);
+  }, [initialUser]);
 
-  const login = async (credentials: any) => {
-    // Server Action
-    const { loginAction } = await import("@/app/actions/auth");
-    const result = await loginAction({
-        email: credentials.email, 
-        password: credentials.password 
-    });
-
-    if (result?.error) {
-      throw new Error(result.error);
-    }
-    // Action handles redirect.
-  };
-
-  const register = async (credentials: any) => {
-    const { registerAction } = await import("@/app/actions/auth");
-    const result = await registerAction({
-      email: credentials.email,
-      password: credentials.password,
-      name: credentials.name || ""
-    });
-
-    if (result?.error) {
-      throw new Error(result.error);
-    }
-    // Action return success, likely we should redirect manually if action didn't
-    if (result?.success) {
-         router.push(`/verify-email?email=${encodeURIComponent(credentials.email)}`);
-    }
+  const refreshUser = async () => {
+      // Background update - silent fallback
+      try {
+          const freshUser = await getCurrentUserAction();
+          setUser(freshUser);
+      } catch (e) {
+          console.error("Failed to refresh user", e);
+      }
   };
 
   const logout = async () => {
-    const { logoutAction } = await import("@/app/actions/auth");
-    await logoutAction(); // Handles redirect
-    setUser(null);
-    setAccessToken(null);
+    setIsLoading(true);
+    try {
+      await logoutAction(); // Handles redirect
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, accessToken, login, register, logout }}
+      value={{ user, isLoading, logout, refreshUser }}
     >
       {children}
     </AuthContext.Provider>
   );
 }
+
+// Alias for NextAuth migration ease
+// Alias Removed: Use AuthProvider for Client Context, or SessionProvider from @/context/session-provider for Server Component.
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -102,4 +72,15 @@ export const useAuth = () => {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
+};
+
+// NextAuth v5 Mimic
+export const useSession = () => {
+  const context = useAuth();
+  
+  return {
+    data: context.user ? { user: context.user } : null,
+    status: context.isLoading ? "loading" : (context.user ? "authenticated" : "unauthenticated"),
+    update: context.refreshUser, 
+  };
 };

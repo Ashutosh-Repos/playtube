@@ -400,6 +400,7 @@ model Channel {
 
   user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   videos       Video[]
+  playlists    Playlist[]
   liveStreams  LiveStream[]
   subscribers  Subscription[] @relation("Channel")
   communityPosts CommunityPost[]   // Community tab posts
@@ -782,6 +783,7 @@ model UserInterest {
 model Playlist {
   id           String              @id @default(cuid())
   userId       String
+  channelId    String?
   title        String              @db.VarChar(150)
   description  String?             @db.Text
   visibility   VideoVisibility     @default(PUBLIC)
@@ -791,14 +793,18 @@ model Playlist {
   videoCount   Int                 @default(0)
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
+  deletedAt    DateTime?           // Soft delete
 
-  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  videos PlaylistVideo[]
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel? @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  videos  PlaylistVideo[]
 
   @@unique([userId, systemType])
   @@index([userId])
+  @@index([channelId]) // Efficient channel page lookups
   @@index([visibility])
   @@index([userId, createdAt(sort: Desc)])  // User's playlists by date
+  @@index([deletedAt]) // Soft delete queries
   @@map("playlists")
 }
 

@@ -483,3 +483,15 @@ export async function revokeSessionByIdAction(sessionId: string) {
     return { error: "Internal Server Error" };
   }
 }
+
+export async function getCurrentUserAction() {
+  const session = await validateSession();
+  if (!session) return null;
+  return {
+    id: session.sub,
+    email: session.email,
+    name: session.name || undefined,
+    role: session.role,
+    status: session.status,
+  };
+}

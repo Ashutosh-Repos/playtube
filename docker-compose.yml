@@ -32,8 +32,53 @@ services:
   #     - "5432:5432"
   #   volumes:
   #     - postgres_data:/var/lib/postgresql/data
+  # Object Storage (MinIO)
+  minio:
+    image: minio/minio:latest
+    container_name: playtube_minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
 
+  # MinIO Setup (Bucket & Webhook Configuration)
+  minio-setup:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      echo 'Waiting for MinIO...' &&
+      until mc alias set myminio http://minio:9000 minioadmin minioadmin; do echo '...waiting'; sleep 1; done;
+      echo 'Creating bucket...' &&
+      mc mb --ignore-existing myminio/play-videos &&
+      echo 'Setting public download policy...' &&
+      mc anonymous set download myminio/play-videos &&
+      echo 'Configuring Webhook...' &&
+      mc admin config set myminio notify_webhook:1 endpoint='http://host.docker.internal:4003/internal/s3-events' auth_token='secret_webhook_token' queue_limit='1000' &&
+      mc admin service restart myminio &&
+      echo 'Waiting for restart...' &&
+      sleep 5 &&
+      echo 'Adding bucket event notification...' &&
+      mc event add --ignore-existing myminio/play-videos arn:minio:sqs::1:webhook --event put --suffix .mp4 &&
+      echo 'MinIO Setup Complete!'
+      "
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Required for Linux, good practice for Mac implicit
 volumes:
   rabbitmq_data:
   redis_data:
+  minio_data:
   # postgres_data:

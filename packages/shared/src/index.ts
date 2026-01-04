@@ -3,4 +3,5 @@
  */
 
 export * from "./utils";
+export * from "./auth/express";
 

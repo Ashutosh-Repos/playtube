@@ -2,7 +2,7 @@ export const AUTH_TOKEN = "auth_token";
 export const REFRESH_TOKEN = process.env.NODE_ENV === "production" ? "__Host-auth_refresh" : "auth_refresh";
 
 export const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // 30 Days
-export const ACCESS_MAX_AGE = process.env.NODE_ENV === "development" ? 10 : 15 * 60; // 1 min in dev, 15 mins in prod
+export const ACCESS_MAX_AGE = process.env.NODE_ENV === "development" ? 600 : 15 * 60; // 1 min in dev, 15 mins in prod
 
 export const REFRESH_PATH = "/";
 
