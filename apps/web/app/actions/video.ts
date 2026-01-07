@@ -11,7 +11,7 @@ const updateVideoSchema = z.object({
   title: z.string().min(1).max(100).optional(),
   description: z.string().max(5000).optional().nullable(),
   visibility: z.enum(["PUBLIC", "PRIVATE", "UNLISTED", "SCHEDULED"]).optional(),
-  thumbnailUrl: z.string().url().optional().nullable(),
+  thumbnailUrl: z.string().optional().nullable(),
   tags: z.array(z.string()).optional(),
   categoryId: z.string().optional().nullable(),
   language: z.string().max(10).optional().nullable(),
@@ -21,6 +21,21 @@ const updateVideoSchema = z.object({
   isPremiere: z.boolean().optional(),
   scheduledAt: z.string().datetime().optional().nullable(),
   premiereStartsAt: z.string().datetime().optional().nullable(),
+  chapters: z.array(z.object({
+    title: z.string().min(1).max(100),
+    startTime: z.number().int().min(0),
+  })).optional(),
+  cards: z.array(z.object({
+    type: z.enum(["VIDEO", "PLAYLIST", "CHANNEL", "LINK", "POLL"]),
+    title: z.string().max(100).optional().nullable(),
+    startTime: z.number().int().min(0),
+    endTime: z.number().int().min(0).optional().nullable(),
+    targetVideoId: z.string().optional().nullable(),
+    targetPlaylistId: z.string().optional().nullable(),
+    targetChannelId: z.string().optional().nullable(),
+    targetUrl: z.string().url().optional().nullable(),
+    pollOptions: z.array(z.string()).optional().nullable(),
+  })).optional(),
 });
 
 /**
@@ -196,5 +211,37 @@ export async function abortMultipartUploadAction(videoId: string) {
         }
         console.error("Abort Multipart Error:", error);
         return { success: false as const, error: "Failed to abort upload" };
+    }
+}
+
+/**
+ * Get Categories
+ */
+export async function getCategoriesAction() {
+    try {
+        const response = await videoService.getCategories();
+        return { success: true as const, data: response.data };
+    } catch (error) {
+        if (error instanceof ServiceError) {
+          return { success: false as const, error: error.message };
+        }
+        console.error("Get Categories Error:", error);
+        return { success: false as const, error: "Failed to fetch categories" };
+    }
+}
+
+/**
+ * Get Presigned URL for Thumbnail Upload
+ */
+export async function getThumbnailUploadUrlAction(videoId: string, contentType: string) {
+    try {
+        const response = await videoService.getThumbnailUploadUrl(videoId, contentType);
+        return { success: true as const, data: response.data };
+    } catch (error) {
+        if (error instanceof ServiceError) {
+          return { success: false as const, error: error.message };
+        }
+        console.error("Thumbnail Upload URL Error:", error);
+        return { success: false as const, error: "Failed to get thumbnail upload URL" };
     }
 }

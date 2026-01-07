@@ -26,7 +26,7 @@ const updateVideoSchema = z.object({
   categoryId: z.string().optional().nullable(),
   language: z.string().max(10).optional().nullable(),
   tags: z.array(z.string()).optional(),
-  thumbnailUrl: z.string().optional().nullable(), // Removed .url() validation as it might be a key
+  thumbnailUrl: z.string().optional().nullable(),
   allowComments: z.boolean().optional(),
   allowEmbedding: z.boolean().optional(),
   isAgeRestricted: z.boolean().optional(),
@@ -48,6 +48,10 @@ const updateVideoSchema = z.object({
     targetUrl: z.string().url().optional().nullable(),
     pollOptions: z.array(z.string()).optional().nullable(),
   })).optional(),
+});
+
+const thumbnailUploadSchema = z.object({
+  contentType: z.string().regex(/^image\/(jpeg|png|webp|jpg)$/),
 });
 
 // Helper to transform DB Video object for API response
@@ -153,13 +157,21 @@ router.get("/:id", async (req: Request, res: Response) => {
     
 
     const video = await prisma.video.findFirst({
-      where: { id , deletedAt: null, channel: { userId: authUserId } },
+      where: { 
+        id, 
+        deletedAt: null,
+        OR: [
+          { visibility: { in: ["PUBLIC", "UNLISTED"] } },
+          { channel: { userId: authUserId || "ANONYMOUS" } }
+        ]
+      },
       select: videoSelect,
     }) as VideoResponse;
-    if(!video){
+
+    if (!video) {
       return res.status(404).json({
         success: false,
-        error: { code: "NOT_FOUND", message: "Video does not belongs to you or not exists" },
+        error: { code: "NOT_FOUND", message: "Video not found or access denied" },
       });
     }
     // Transform (Key -> URL)
@@ -237,7 +249,8 @@ router.patch("/:id", requireAuth, async (req: Request, res: Response) => {
           deleteMany: {}, // 🗑️ Clear existing
           create: (cards as any[]).map(c => ({
             ...c,
-            pollOptions: c.pollOptions ? JSON.stringify(c.pollOptions) : null,
+            // pollOptions is already a Json-compatible array from Zod
+            pollOptions: c.pollOptions || null,
           })) // ✨ Add new
         } : undefined,
       },
@@ -274,6 +287,65 @@ router.patch("/:id", requireAuth, async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: { code: "INTERNAL_ERROR", message: "Failed to update video" },
+    });
+  }
+});
+
+/**
+ * POST /videos/:id/thumbnail
+ * Generate a presigned URL for custom thumbnail upload
+ */
+router.post("/:id/thumbnail", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as AuthenticatedRequest).user!.id;
+    const { id } = req.params;
+
+    if(!id) return res.status(400).json({
+      success: false,
+      error: { code: "VALIDATION_ERROR", message: "Invalid video id" },
+    })
+
+    // Validate request
+    const parsed = thumbnailUploadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: "Invalid image type. Supported: jpeg, png, webp" },
+      });
+    }
+
+    // Check ownership
+    const video = await prisma.video.findUnique({
+      where: { id },
+      include: { channel: { select: { userId: true } } },
+    });
+
+    if (!video || video.deletedAt) {
+      return res.status(404).json({
+        success: false,
+        error: { code: "NOT_FOUND", message: "Video not found" },
+      });
+    }
+
+    if (video.channel.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: { code: "FORBIDDEN", message: "Not authorized" },
+      });
+    }
+
+    const { getPresignedThumbnailUrl } = await import("../lib/storage");
+    const { uploadUrl, key } = await getPresignedThumbnailUrl(id, parsed.data.contentType);
+
+    res.json({
+      success: true,
+      data: { uploadUrl, key },
+    });
+  } catch (error) {
+    console.error("Thumbnail upload url error:", error);
+    res.status(500).json({
+      success: false,
+      error: { code: "INTERNAL_ERROR", message: "Failed to generate upload URL" },
     });
   }
 });

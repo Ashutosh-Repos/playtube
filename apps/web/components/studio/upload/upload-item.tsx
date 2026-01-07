@@ -151,7 +151,7 @@ export function UploadItem({ item }: Props) {
                               </Button>
                          )}
                          {/* Edit Button - Only show if we have an ID to edit (which we always do) */}
-                         <Link href={`/studio/video/${item.id}/edit`} >
+                         <Link href={`/studio/content/video/${item.id}`} >
                             <Button variant="ghost" size="sm" className="h-6 text-xs px-2">
                                 Edit
                             </Button>

@@ -249,6 +249,12 @@ export const videoService = {
       method: "DELETE",
     }),
 
+  getThumbnailUploadUrl: (videoId: string, contentType: string) =>
+    client<{ success: boolean; data: { uploadUrl: string; key: string } }>(`/videos/${videoId}/thumbnail`, {
+      method: "POST",
+      body: JSON.stringify({ contentType }),
+    }),
+
   // Playlists
   createPlaylist: (data: CreatePlaylistInput) =>
     client<{ success: boolean; data: PlaylistDetails }>("/playlists", {

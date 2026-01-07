@@ -6,11 +6,12 @@ import { toast } from "sonner";
 import Image from "next/image";
 
 interface ThumbnailUploadProps {
-  onUpload: (file: File | null) => void;
+  onUpload: (key: string | null) => void;
   currentUrl?: string | null;
+  videoId: string;
 }
 
-export function ThumbnailUpload({ onUpload, currentUrl }: ThumbnailUploadProps) {
+export function ThumbnailUpload({ onUpload, currentUrl, videoId }: ThumbnailUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(currentUrl || null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -32,16 +33,36 @@ export function ThumbnailUpload({ onUpload, currentUrl }: ThumbnailUploadProps) 
     const objectUrl = URL.createObjectURL(file);
     setPreview(objectUrl);
 
-      try {
-        // Just preview locally
-        const objectUrl = URL.createObjectURL(file);
-        setPreview(objectUrl);
-        // Pass the file back to parent for actual upload later
-        onUpload(file);
+    try {
+        const { getThumbnailUploadUrlAction } = await import("@/app/actions/video");
         
-      } catch (e) {
-         setPreview(null);
-         toast.error("Failed to select image");
+        // 1. Get Presigned URL
+        const res = await getThumbnailUploadUrlAction(videoId, file.type);
+        
+        if (!res.success) {
+            throw new Error(res.error || "Failed to get upload URL");
+        }
+
+        const { uploadUrl, key } = res.data;
+
+        // 2. Upload to S3/MinIO directly
+        const uploadRes = await fetch(uploadUrl, {
+            method: "PUT",
+            body: file,
+            headers: {
+                "Content-Type": file.type
+            }
+        });
+
+        if (!uploadRes.ok) throw new Error("Upload failed");
+
+        // 3. Pass the KEY back to parent
+        onUpload(key as any);
+        toast.success("Thumbnail uploaded");
+        
+      } catch (e: any) {
+         setPreview(currentUrl || null);
+         toast.error(e.message || "Failed to upload image");
       } finally {
         setIsUploading(false);
       }

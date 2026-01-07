@@ -55,7 +55,7 @@ export const columns: ColumnDef<Video>[] = [
                 </div>
             )}
             {/* Hover Actions Overlay */}
-             <Link href={`/studio/content/${video.id}`} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+             <Link href={`/studio/content/video/${video.id}`} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                  {/* <Button size="icon" variant="ghost" className="h-6 w-6 text-white hover:text-white hover:bg-white/20 border border-red-400"> */}
                     <Pen className="h-3 w-3" />
                  {/* </Button> */}
