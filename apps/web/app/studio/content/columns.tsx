@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ResumeButton } from "./resume-button";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 // Start by defining the shape of our data.
 export type Video = {
@@ -54,11 +55,11 @@ export const columns: ColumnDef<Video>[] = [
                 </div>
             )}
             {/* Hover Actions Overlay */}
-             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                 <Button size="icon" variant="ghost" className="h-6 w-6 text-white hover:text-white hover:bg-white/20">
+             <Link href={`/studio/content/${video.id}`} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                 {/* <Button size="icon" variant="ghost" className="h-6 w-6 text-white hover:text-white hover:bg-white/20 border border-red-400"> */}
                     <Pen className="h-3 w-3" />
-                 </Button>
-             </div>
+                 {/* </Button> */}
+             </Link>
           </div>
           <div className="flex flex-col gap-1 max-w-[200px]">
             <p className="font-medium truncate" title={video.title}>

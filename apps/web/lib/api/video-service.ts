@@ -4,9 +4,37 @@
  * All write operations (create, update, delete) go through this client
  * to ensure events are triggered and side effects are handled correctly.
  */
-
 import { cookies } from "next/headers";
 import { AUTH_TOKEN } from "@/lib/auth/cookie";
+import { 
+  VideoDetails, 
+  VideoListItem, 
+  InitiateUploadInput, 
+  UploadResponse, 
+  UpdateVideoInput,
+  ChannelDetails,
+  PlaylistDetails,
+  PlaylistListItem,
+  CreateChannelInput,
+  UpdateChannelInput,
+  CreatePlaylistInput,
+  UpdatePlaylistInput
+} from "@repo/shared";
+
+export type { 
+  VideoDetails, 
+  VideoListItem, 
+  InitiateUploadInput, 
+  UploadResponse, 
+  UpdateVideoInput,
+  ChannelDetails,
+  PlaylistDetails,
+  PlaylistListItem,
+  CreateChannelInput,
+  UpdateChannelInput,
+  CreatePlaylistInput,
+  UpdatePlaylistInput
+};
 
 // Environment validation
 const VIDEO_SERVICE_URL = process.env.VIDEO_SERVICE_URL || "http://localhost:4003";
@@ -113,57 +141,11 @@ async function publicClient<T>(
 // Video Operations
 // ============================================================================
 
-export interface InitiateUploadInput {
-  fileName: string;
-  channelId: string;
-}
-
-export interface UploadResponse {
-  success: boolean;
-  data: {
-    videoId: string;
-    uploadUrl: string;
-    wsUrl: string;
-    expiresAt: string;
-  };
-}
-
-export interface UpdateVideoInput {
-  title?: string;
-  description?: string | null;
-  visibility?: "PUBLIC" | "PRIVATE" | "UNLISTED" | "SCHEDULED";
-  thumbnailUrl?: string | null;
-  tags?: string[];
-  categoryId?: string | null;
-  language?: string | null;
-  allowComments?: boolean;
-  allowEmbedding?: boolean;
-  isAgeRestricted?: boolean;
-  isPremiere?: boolean;
-  scheduledAt?: string | null;
-  premiereStartsAt?: string | null;
-}
+// Types are now imported from @repo/shared
 
 export interface VideoListResponse {
   success: boolean;
-  data: Array<{
-    id: string;
-    title: string;
-    thumbnailUrl: string | null;
-    visibility: string;
-    processingStatus: string;
-    viewCount: number;
-    likeCount: number;
-    commentCount: number;
-    duration: number;
-    publishedAt: string | null;
-    createdAt: string;
-    // Optional fields (returned when ?fields=full)
-    description?: string | null;
-    scheduledAt?: string | null;
-    dislikeCount?: number;
-    isAgeRestricted?: boolean;
-  }>;
+  data: VideoListItem[];
   meta: {
     total: number;
     page: number;
@@ -172,45 +154,35 @@ export interface VideoListResponse {
   };
 }
 
-// ============================================================================
-// Playlist Operations
-// ============================================================================
-
-export interface CreatePlaylistInput {
-  title: string;
-  description?: string;
-  visibility?: "PUBLIC" | "PRIVATE" | "UNLISTED";
-  channelId?: string;
+export type GetVideoByIdResponse =  {
+  success: true;
+  data: VideoDetails;
+} | {
+  success: false;
+  error: string;
 }
 
-export interface UpdatePlaylistInput {
-  title?: string;
-  description?: string;
-  visibility?: "PUBLIC" | "PRIVATE" | "UNLISTED";
+export interface PlaylistListResponse {
+  success: boolean;
+  data: PlaylistListItem[];
 }
 
-// ============================================================================
-// Channel Operations
-// ============================================================================
-
-export interface CreateChannelInput {
-  name: string;
-  handle: string;
-  description?: string;
-  image?: string;
-  bannerUrl?: string;
-  contactEmail?: string;
-  links?: Array<{ title: string; url: string }>;
+export type GetPlaylistByIdResponse = {
+  success: true;
+  data: PlaylistDetails;
+} | {
+  success: false;
+  error: string;
 }
 
-export interface UpdateChannelInput {
-  name?: string;
-  description?: string;
-  image?: string;
-  bannerUrl?: string;
-  contactEmail?: string;
-  links?: Array<{ title: string; url: string }>;
+export type GetChannelByIdResponse = {
+  success: true;
+  data: ChannelDetails;
+} | {
+  success: false;
+  error: string;
 }
+
 
 // ============================================================================
 // Exported Service Methods
@@ -229,6 +201,27 @@ export const videoService = {
       method: "POST",
     }),
 
+  // Multipart Uploads
+  getMultipartPartUrl: (videoId: string, uploadId: string, partNumber: number) =>
+    client<{ success: boolean; data: { url: string } }>(`/videos/upload/${videoId}/multipart/part`, {
+      method: "POST",
+      body: JSON.stringify({ uploadId, partNumber }),
+    }),
+
+  completeMultipartUpload: (videoId: string, uploadId: string, parts: Array<{ ETag: string; PartNumber: number }>) =>
+    client<{ success: boolean }>(`/videos/upload/${videoId}/multipart/complete`, {
+      method: "POST",
+      body: JSON.stringify({ uploadId, parts }),
+    }),
+
+  getMultipartStatus: (videoId: string) =>
+    client<{ success: boolean; data: { parts: Array<{ ETag: string; PartNumber: number; Size: number }> } }>(`/videos/upload/${videoId}/multipart`),
+
+  abortMultipartUpload: (videoId: string) =>
+    client<{ success: boolean }>(`/videos/upload/${videoId}/multipart`, {
+      method: "DELETE",
+    }),
+
   listVideos: (params: { channelId: string; page?: number; limit?: number; status?: string }) => {
     const query = new URLSearchParams({
       channelId: params.channelId,
@@ -240,7 +233,7 @@ export const videoService = {
   },
 
   // Fetch video details (Authenticated - for owner interactions)
-  getVideo: (id: string) => client<{ success: boolean; data: any }>(`/videos/${id}`),
+  getVideo: (id: string) => client<GetVideoByIdResponse>(`/videos/${id}`),
 
   // Fetch video details (Public - for playback)
   getPublicVideo: (id: string) => publicClient<{ success: boolean; data: any }>(`/videos/${id}`),
@@ -258,7 +251,7 @@ export const videoService = {
 
   // Playlists
   createPlaylist: (data: CreatePlaylistInput) =>
-    client<{ success: boolean; data: any }>("/playlists", {
+    client<{ success: boolean; data: PlaylistDetails }>("/playlists", {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -267,13 +260,13 @@ export const videoService = {
     const query = new URLSearchParams();
     if (params.channelId) query.set("channelId", params.channelId);
     if (params.scope) query.set("scope", params.scope);
-    return client<{ success: boolean; data: any[] }>(`/playlists?${query}`);
+    return client<PlaylistListResponse>(`/playlists?${query}`);
   },
 
-  getPlaylist: (id: string) => client<{ success: boolean; data: any }>(`/playlists/${id}`),
+  getPlaylist: (id: string) => client<GetPlaylistByIdResponse>(`/playlists/${id}`),
 
   updatePlaylist: (id: string, data: UpdatePlaylistInput) =>
-    client<{ success: boolean; data: any }>(`/playlists/${id}`, {
+    client<{ success: boolean; data: PlaylistDetails }>(`/playlists/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
@@ -303,13 +296,13 @@ export const videoService = {
 
   // Channels
   createChannel: (data: CreateChannelInput) =>
-    client<{ success: boolean; data: any }>("/channels", {
+    client<{ success: boolean; data: ChannelDetails }>("/channels", {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
   updateChannel: (id: string, data: UpdateChannelInput) =>
-    client<{ success: boolean; data: any }>(`/channels/${id}`, {
+    client<{ success: boolean; data: ChannelDetails }>(`/channels/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),

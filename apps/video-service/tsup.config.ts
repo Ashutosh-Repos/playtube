@@ -5,5 +5,5 @@ export default defineConfig({
   format: ["cjs", "esm"],
   dts: true,
   clean: true,
-  noExternal: ["@repo/database", "@repo/env", "@repo/events"],
+  noExternal: ["@repo/database", "@repo/env", "@repo/events", "@repo/shared"],
 });

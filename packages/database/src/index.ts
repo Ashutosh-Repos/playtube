@@ -7,9 +7,10 @@
  * Prisma 7 generates client to src/generated/prisma
  * Run `pnpm db:generate` after updating schema.
  */
-
+export type { Prisma, PrismaClient } from "@prisma/client";
 export * from "./client";
 export * from "./cleanup";
+export * from "./selects";
 // export * from "@prisma/client"; 
 // Best Practice: Import types directly from "@prisma/client" to avoid CommonJS/ESM interop warnings in Next.js
 

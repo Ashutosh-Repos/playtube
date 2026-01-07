@@ -22,7 +22,8 @@
       "@/*": ["./*"],
       "@repo/database": ["../../packages/database/src"],
       "@repo/events": ["../../packages/events/src"],
-      "@repo/env": ["../../packages/env/src"]
+      "@repo/env": ["../../packages/env/src"],
+      "@repo/shared": ["../../packages/shared/src"]
     }
   },
   "include": [

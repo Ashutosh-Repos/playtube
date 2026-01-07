@@ -1,11 +1,20 @@
 import { Router, Request, RequestHandler } from "express";
 import { prisma } from "@repo/database";
 import { cacheVideoStatus } from "../lib/redis";
-import { getPresignedUploadUrl, deleteObjectsWithPrefix } from "../lib/storage";
+import { 
+  deleteObjectsWithPrefix,
+  createMultipartUpload,
+  getPresignedPartUrl,
+  completeMultipartUpload,
+  listUploadedParts,
+  abortMultipartUpload,
+  getObjectStat
+} from "../lib/storage";
 import { requireAuth, AuthUser } from "@repo/shared";
 import { uploadVideoSchema } from "../validation/schema";
 import { config } from "../config";
 import { EVENTS, EXCHANGES, publishMessage } from "@repo/events";
+import { publishToVideoChannel } from "../lib/redis";
 
 const router: Router = Router();
 
@@ -13,9 +22,6 @@ const router: Router = Router();
 interface AuthenticatedRequest extends Request {
   user?: AuthUser;
 }
-
-
-
 
 /**
  * POST /videos/upload
@@ -88,8 +94,14 @@ const uploadHandler: RequestHandler = async (req, res) => {
       },
     });
 
-    // Generate presigned URL
-    const uploadUrl = await getPresignedUploadUrl(video.id);
+    // Initialize Multipart Upload (New Flow)
+    const uploadId = await createMultipartUpload(video.id);
+
+    // Update video with uploadId
+    await prisma.video.update({
+        where: { id: video.id },
+        data: { uploadId }
+    });
 
     // Cache initial status
     await cacheVideoStatus(video.id, {
@@ -113,13 +125,13 @@ const uploadHandler: RequestHandler = async (req, res) => {
         wsUrl = `${wsProtocol}://${host}/ws/videos?id=${video.id}&token=${token}`;
     }
 
-    console.log(`[Pipeline] 1. Upload Initiated: videoId=${video.id} channel=${userChannel.handle}`);
+    console.log(`[Pipeline] 1. Upload Initiated: videoId=${video.id} channel=${userChannel.handle} uploadId=${uploadId}`);
 
     res.status(201).json({
       success: true,
       data: {
         videoId: video.id,
-        uploadUrl,
+        uploadId,  // Multipart ID
         wsUrl,
         expiresAt: uploadExpiresAt.toISOString(),
       },
@@ -134,6 +146,207 @@ const uploadHandler: RequestHandler = async (req, res) => {
 };
 
 router.post("/", requireAuth, uploadHandler);
+
+/**
+ * POST /videos/:id/multipart/part
+ * Get presigned URL for a chunk
+ */
+router.post("/:id/multipart/part", requireAuth, async (req : AuthenticatedRequest, res) => {
+    try {
+        const userId = req.user!.id;
+        const { id } = req.params;
+        
+        if (!id) return res.status(400).json({ success: false, error: "Missing video ID" });
+
+        const { uploadId, partNumber } = req.body; // Validation needed
+
+        if (!uploadId || !partNumber) {
+             return res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "uploadId and partNumber required" }});
+        }
+
+        const video = await prisma.video.findUnique({
+            where: { id },
+            include: { channel: true }
+        });
+
+        if (!video || video.channel.userId !== userId) {
+            return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Unauthorized" }});
+        }
+
+        // Verify uploadId matches DB to ensure we are appending to the correct session
+        if (video.uploadId !== uploadId) {
+             return res.status(400).json({ success: false, error: { code: "INVALID_SESSION", message: "Upload session mismatch. Please restart upload." }});
+        }
+
+        const url = await getPresignedPartUrl(id, String(uploadId), Number(partNumber));
+        res.json({ success: true, data: { url } });
+
+    } catch (error) {
+        console.error("Multipart Part Error:", error);
+        res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Failed to get part URL" }});
+    }
+});
+
+/**
+ * POST /videos/:id/multipart/complete
+ * Finish the upload
+ */
+router.post("/:id/multipart/complete", requireAuth, async (req : AuthenticatedRequest, res) => {
+    try {
+        const userId = req.user!.id;
+        const { id } = req.params;
+        
+        if (!id) return res.status(400).json({ success: false, error: "Missing video ID" });
+
+        const { uploadId, parts } = req.body;
+
+        if (!uploadId || !parts || !Array.isArray(parts)) {
+             return res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "uploadId and parts array required" }});
+        }
+
+        const video = await prisma.video.findUnique({
+             where: { id },
+             include: { channel: true } 
+        });
+
+        if (!video || video.channel.userId !== userId) {
+             return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Unauthorized" }});
+        }
+        
+         if (video.uploadId !== uploadId) {
+             return res.status(400).json({ success: false, error: { code: "INVALID_SESSION", message: "Upload session mismatch" }});
+        }
+
+        await completeMultipartUpload(id, String(uploadId), parts);
+        
+        // ---------------------------------------------------------------------
+        // Consolidated Processing Trigger (Previously s3-events webhook)
+        // ---------------------------------------------------------------------
+        console.log(`[Pipeline] ✅ Multipart Upload Completed for ${id}. Triggering Processing...`);
+
+        // 1. Get object key (must match storage.ts convention: uploads/{videoId}/original.mp4)
+        const objectKey = `uploads/${id}/original.mp4`;
+        let fileSize = 0;
+
+        try {
+            const stat = await getObjectStat(objectKey);
+            fileSize = stat.size;
+        } catch (e) {
+            console.warn(`[Pipeline] ⚠️ Could not get stats for ${objectKey}, using 0 size`, e);
+        }
+
+        // 2. Update Database (UPLOADING -> PROCESSING)
+        await prisma.video.update({
+            where: { id },
+            data: {
+                processingStatus: "PROCESSING",
+                originalFilePath: objectKey,
+                originalFileSize: fileSize,
+            }
+        });
+
+        // 3. Publish Event for Transcoder
+        await publishMessage(EXCHANGES.VIDEO, EVENTS.VIDEO_UPLOADED, {
+            videoId: id,
+            channelId: video.channelId,
+            fileName: objectKey,
+            size: fileSize,
+            mimetype: "video/mp4", // Default or should we detect? For now MP4 is safe assumption.
+        });
+
+        // 4. Update Cache & Broadcast (Shared with webhook logic)
+        await cacheVideoStatus(id, {
+            status: "processing",
+            progress: 0,
+        });
+
+        await publishToVideoChannel(id, {
+            type: "state",
+            status: "processing",
+            progress: 0,
+        });
+
+        console.log(`[Pipeline] 🚀 Transcode Event Published for ${id}`);
+        res.json({ success: true });
+
+    } catch (error) {
+        console.error("Multipart Complete Error:", error);
+        res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Failed to complete upload" }});
+    }
+});
+
+/**
+ * GET /videos/:id/multipart
+ * List uploaded parts for resume
+ */
+router.get("/:id/multipart", requireAuth, async (req : AuthenticatedRequest, res) => {
+     try {
+        const userId = req.user!.id;
+        const { id } = req.params;
+        
+        if (!id) return res.status(400).json({ success: false, error: "Missing video ID" });
+        
+        const video = await prisma.video.findUnique({ 
+            where: { id }, 
+            include: { channel: true }
+        });
+
+        if (!video || video.channel.userId !== userId) {
+             return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Unauthorized" }});
+        }
+
+        if (!video.uploadId) {
+            return res.json({ success: true, data: { parts: [] } });
+        }
+
+        // Check if uploadId is still valid in S3 (it expires after 7 days usually if not completed)
+        // For now, just list.
+        if (video.uploadId) {
+             const parts = await listUploadedParts(id, video.uploadId);
+             res.json({ success: true, data: { parts } });
+        } else {
+             res.json({ success: true, data: { parts: [] } });
+        }
+
+     } catch(error) {
+         console.error("Multipart List Error:", error);
+         // If uploadId is invalid/not found in S3, return empty list to trigger restart?
+         res.status(500).json({ success: false, error: "Failed to list parts" });
+     }
+});
+
+/**
+ * DELETE /videos/:id/multipart
+ * Abort multipart upload (Clean up S3 parts)
+ */
+router.delete("/:id/multipart", requireAuth, async (req : AuthenticatedRequest, res) => {
+    try {
+        const userId = req.user!.id;
+        const { id } = req.params;
+        
+        if (!id) return res.status(400).json({ success: false, error: "Missing video ID" });
+
+        const video = await prisma.video.findUnique({
+            where: { id },
+            include: { channel: true }
+        });
+
+        if (!video || video.channel.userId !== userId) {
+            return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Unauthorized" }});
+        }
+
+        if (video.uploadId) {
+            await abortMultipartUpload(id, video.uploadId);
+            console.log(`[Pipeline] 🛑 Aborted Multipart Upload for ${id}`);
+        }
+
+        res.json({ success: true });
+
+    } catch (error) {
+        console.error("Multipart Abort Error:", error);
+        res.status(500).json({ success: false, error: "Failed to abort upload" });
+    }
+});
 
 /**
  * POST /videos/:id/retry
@@ -184,6 +397,9 @@ const retryHandler: RequestHandler = async (req, res) => {
     // Calculate new expiry time
     const uploadExpiresAt = new Date(Date.now() + config.upload.presignedUrlExpiry * 1000);
 
+    // Initialize NEW Multipart Session for retry
+    const uploadId = await createMultipartUpload(video.id);
+
     // Update video record (refresh expiry and track retry)
     await prisma.video.update({
         where: { id },
@@ -192,12 +408,10 @@ const retryHandler: RequestHandler = async (req, res) => {
             uploadAttempts: { increment: 1 },
             processingStatus: "UPLOADING", // Reset status to uploading if it was failed
             processingError: null,
+            uploadId, // Update session
         },
     });
 
-    // Generate new presigned URL
-    const uploadUrl = await getPresignedUploadUrl(video.id);
-    
     // WebSocket URL Calculation
     // Include token for WS auth (matching initial upload)
     const token = req.headers.authorization?.replace("Bearer ", "") || "";
@@ -211,13 +425,13 @@ const retryHandler: RequestHandler = async (req, res) => {
         wsUrl = `${wsProtocol}://${host}/ws/videos?id=${video.id}&token=${token}`;
     }
 
-    console.log(`[Pipeline] ✅ Retry Initiated for ${id} (Attempt ${video.uploadAttempts + 1})`);
+    console.log(`[Pipeline] ✅ Retry Initiated for ${id} (Attempt ${video.uploadAttempts + 1}) uploadId=${uploadId}`);
 
     res.json({
       success: true,
       data: {
         videoId: video.id,
-        uploadUrl,
+        uploadId,
         wsUrl,
         expiresAt: uploadExpiresAt.toISOString(),
       },

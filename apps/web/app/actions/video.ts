@@ -5,6 +5,7 @@ import { z } from "zod";
 import { videoService, ServiceError, UpdateVideoInput } from "@/lib/api/video-service";
 import { getActiveChannelId } from "@/app/studio/data";
 
+
 // Validation schema (matches backend video.ts updateVideoSchema)
 const updateVideoSchema = z.object({
   title: z.string().min(1).max(100).optional(),
@@ -28,7 +29,7 @@ const updateVideoSchema = z.object({
 export async function fetchStudioVideos(page = 1, limit = 10, status?: string) {
   const channelId = await getActiveChannelId();
   if (!channelId) {
-    return { success: false, error: "No active channel" };
+    return { success: false as const, error: "No active channel" };
   }
 
   try {
@@ -36,10 +37,10 @@ export async function fetchStudioVideos(page = 1, limit = 10, status?: string) {
     return response;
   } catch (error) {
     if (error instanceof ServiceError) {
-      return { success: false, error: error.message };
+      return { success: false as const, error: error.message };
     }
     console.error("Fetch Videos Error:", error);
-    return { success: false, error: "Failed to fetch videos" };
+    return { success: false as const, error: "Failed to fetch videos" };
   }
 }
 
@@ -52,10 +53,10 @@ export async function fetchVideoById(videoId: string) {
     return response;
   } catch (error) {
     if (error instanceof ServiceError) {
-      return { success: false, error: error.message };
+      return { success: false as const, error: error.message };
     }
     console.error("Fetch Video Error:", error);
-    return { success: false, error: "Failed to fetch video" };
+    return { success: false as const, error: "Failed to fetch video" };
   }
 }
 
@@ -65,7 +66,7 @@ export async function fetchVideoById(videoId: string) {
 export async function updateVideoAction(videoId: string, data: z.infer<typeof updateVideoSchema>) {
   const validated = updateVideoSchema.safeParse(data);
   if (!validated.success) {
-    return { success: false, error: validated.error.errors[0]?.message || "Invalid input" };
+    return { success: false as const, error: validated.error.errors[0]?.message || "Invalid input" };
   }
 
   try {
@@ -76,10 +77,10 @@ export async function updateVideoAction(videoId: string, data: z.infer<typeof up
     return { success: true };
   } catch (error) {
     if (error instanceof ServiceError) {
-      return { success: false, error: error.message };
+      return { success: false as const, error: error.message };
     }
     console.error("Update Video Error:", error);
-    return { success: false, error: "Failed to update video" };
+    return { success: false as const, error: "Failed to update video" };
   }
 }
 
@@ -93,10 +94,10 @@ export async function deleteVideoAction(videoId: string) {
     return { success: true };
   } catch (error) {
     if (error instanceof ServiceError) {
-      return { success: false, error: error.message };
+      return { success: false as const, error: error.message };
     }
     console.error("Delete Video Error:", error);
-    return { success: false, error: "Failed to delete video" };
+    return { success: false as const, error: "Failed to delete video" };
   }
 }
 
@@ -106,7 +107,7 @@ export async function deleteVideoAction(videoId: string) {
 export async function initiateVideoUpload(fileName: string) {
   const channelId = await getActiveChannelId();
   if (!channelId) {
-    return { success: false, error: "No active channel" };
+    return { success: false as const, error: "No active channel" };
   }
 
   try {
@@ -114,10 +115,10 @@ export async function initiateVideoUpload(fileName: string) {
     return response;
   } catch (error) {
     if (error instanceof ServiceError) {
-      return { success: false, error: error.message };
+      return { success: false as const, error: error.message };
     }
     console.error("Initiate Upload Error:", error);
-    return { success: false, error: "Failed to initiate upload" };
+    return { success: false as const, error: "Failed to initiate upload" };
   }
 }
 
@@ -129,10 +130,71 @@ export async function retryVideoUpload(videoId: string) {
     const response = await videoService.retryUpload(videoId);
     return response;
   } catch (error) {
-    if (error instanceof ServiceError) {
-      return { success: false, error: error.message };
-    }
-    console.error("Retry Upload Error:", error);
-    return { success: false, error: "Failed to retry upload" };
+    return { success: false as const, error: "Failed to retry upload" };
   }
+}
+
+/**
+ * Get Presigned URL for a Multipart Chunk
+ */
+export async function getMultipartPartUrlAction(videoId: string, uploadId: string, partNumber: number) {
+  try {
+    const response = await videoService.getMultipartPartUrl(videoId, uploadId, partNumber);
+    return response;
+  } catch (error) {
+     if (error instanceof ServiceError) {
+      return { success: false as const, error: error.message };
+    }
+    console.error("Get Part URL Error:", error);
+    return { success: false as const, error: "Failed to get part URL" };
+  }
+}
+
+/**
+ * Complete Multipart Upload
+ */
+export async function completeMultipartUploadAction(videoId: string, uploadId: string, parts: Array<{ ETag: string; PartNumber: number }>) {
+  try {
+    const response = await videoService.completeMultipartUpload(videoId, uploadId, parts);
+    revalidatePath("/studio/content");
+    return response;
+  } catch (error) {
+     if (error instanceof ServiceError) {
+      return { success: false as const, error: error.message };
+    }
+    console.error("Complete Multipart Error:", error);
+    return { success: false as const, error: "Failed to complete upload" };
+  }
+}
+
+/**
+ * Get Multipart Status (List Parts for Resume)
+ */
+export async function getMultipartStatusAction(videoId: string) {
+  try {
+    const response = await videoService.getMultipartStatus(videoId);
+    return response;
+  } catch (error) {
+     if (error instanceof ServiceError) {
+      return { success: false as const, error: error.message };
+    }
+    console.error("Get Multipart Status Error:", error);
+    return { success: false as const, error: "Failed to get multipart status" };
+  }
+}
+
+/**
+ * Abort Multipart Upload (Cancel)
+ */
+export async function abortMultipartUploadAction(videoId: string) {
+    try {
+        const response = await videoService.abortMultipartUpload(videoId);
+        return response;
+    } catch (error) {
+        if (error instanceof ServiceError) {
+          return { success: false as const, error: error.message };
+        }
+        console.error("Abort Multipart Error:", error);
+        return { success: false as const, error: "Failed to abort upload" };
+    }
 }

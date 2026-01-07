@@ -107,7 +107,6 @@ export function SearchForm() {
   };
 
   function onSubmit(data: z.infer<typeof FormSchema>) {
-    console.log("Auto-submitted query:", data.query);
     router.push(`/search?q=${encodeURIComponent(data.query)}`);
     setFormActive(false); 
   }

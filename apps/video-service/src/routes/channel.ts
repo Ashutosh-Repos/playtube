@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
-import { prisma } from "@repo/database";
-import { requireAuth, AuthUser } from "@repo/shared";
+import { prisma, channelSelect, ChannelPayload } from "@repo/database";
+import { requireAuth, AuthUser, ChannelDetails } from "@repo/shared";
 import { publishMessage, EXCHANGES, EVENTS } from "@repo/events";
 import { z } from "zod";
 
@@ -43,8 +43,13 @@ const updateChannelSchema = z.object({
 });
 
 // -----------------------------------------------------------------------------
-// Routes
+// Helpers
 // -----------------------------------------------------------------------------
+
+const transformChannel = (channel: ChannelPayload): ChannelDetails => ({
+    ...channel,
+    createdAt: channel.createdAt.toISOString(),
+});
 
 /**
  * GET /check-handle/:handle
@@ -104,7 +109,8 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
         contactEmail: contactEmail || null,
         links: links ?? undefined,
       },
-    });
+      select: channelSelect,
+    }) as ChannelPayload;
 
     await publishMessage(EXCHANGES.CHANNEL, EVENTS.CHANNEL_CREATED, {
       channelId: channel.id,
@@ -114,7 +120,7 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
       image: channel.image || undefined, // undefined for serialization if needed, or null is fine for JSON? specific schema says optional/nullable
     });
 
-    res.status(201).json({ success: true, data: channel });
+    res.status(201).json({ success: true, data: transformChannel(channel) });
   } catch (error) {
     console.error("Create channel error:", error);
     res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Failed to create channel" } });
@@ -130,32 +136,14 @@ router.get("/:id", async (req: Request, res: Response) => {
     const { id } = req.params as { id: string };
     const channel = await prisma.channel.findUnique({
       where: { id },
-      select: {
-        id: true,
-        name: true,
-        handle: true,
-        description: true,
-        image: true,
-        bannerUrl: true,
-        subscriberCount: true,
-        videoCount: true,
-        totalViews: true,
-        createdAt: true,
-        links: true,
-        isVerified: true,
-        status: true,
-        deletedAt: true, // For soft-delete check only
-        // Explicitly exclude: userId, contactEmail (private)
-      },
-    });
+      select: channelSelect,
+    }) as ChannelPayload;
 
     if (!channel || channel.deletedAt) {
       return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Channel not found" } });
     }
 
-    // Remove deletedAt from response
-    const { deletedAt, ...publicChannel } = channel;
-    res.json({ success: true, data: publicChannel });
+    res.json({ success: true, data: transformChannel(channel) });
   } catch (error) {
     console.error("Get channel error:", error);
     res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Failed to fetch channel" } });
@@ -204,7 +192,8 @@ router.patch("/:id", requireAuth, async (req: Request, res: Response) => {
     const updated = await prisma.channel.update({
       where: { id },
       data: updateData,
-    });
+      select: channelSelect,
+    }) as ChannelPayload;
 
     // Identify what changed for the event (naive approach: just send what we got)
     // The schema expects "updates" array
@@ -225,7 +214,7 @@ router.patch("/:id", requireAuth, async (req: Request, res: Response) => {
       image: updated.image || undefined,
     });
 
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: transformChannel(updated) });
   } catch (error) {
     console.error("Update channel error:", error);
     res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Failed to update channel" } });

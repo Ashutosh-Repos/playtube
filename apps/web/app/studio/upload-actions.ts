@@ -6,7 +6,10 @@ import { revalidatePath } from "next/cache";
 export async function initiateUploadAction(data: InitiateUploadInput) {
     try {
         const response = await videoService.initiateUpload(data);
-        return { success: true, data: response.data };
+        if (response.success) {
+            return { success: true, data: response.data };
+        }
+        return { success: false, error: { message: "error" in response ? response.error : "Upload failed" } };
     } catch (error: any) {
         console.error("Initiate Upload Action Failed:", error);
         return { success: false, error: { message: error.message || "Upload failed" } };
@@ -16,7 +19,10 @@ export async function initiateUploadAction(data: InitiateUploadInput) {
 export async function checkVideoStatusAction(videoId: string) {
     try {
         const response = await videoService.getVideo(videoId);
-        return { success: true, data: response.data };
+        if (response.success) {
+            return { success: true, data: response.data };
+        }
+        return { success: false, error: { message: response.error } };
     } catch (error: any) {
         return { success: false, error: { message: error.message || "Status check failed" } };
     }

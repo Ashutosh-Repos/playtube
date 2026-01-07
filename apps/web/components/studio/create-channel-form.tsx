@@ -6,6 +6,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createChannelAction, checkHandleAvailability } from "@/app/actions/channel";
 import { useModal } from "@/components/ui/animated-modal";
+import { useChannel } from "@/context/channel-context";
 import { FileUploadInput } from "@/components/studio/file-upload-input";
 import { useRouter } from "next/navigation";
 import { Loader2, Check, X } from "lucide-react";
@@ -57,8 +58,9 @@ const steps = [
 
 export function CreateChannelForm() {
   const [step, setStep] = useState(0);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
   const { setOpen } = useModal();
+  const { addChannel } = useChannel();
   const router = useRouter();
 
   // Handle availability state
@@ -143,7 +145,7 @@ export function CreateChannelForm() {
     setStep((s) => s - 1);
   }
 
-  function onSubmit(values: CreateChannelInput) {
+  async function onSubmit(values: CreateChannelInput) {
     // Prevent early submission if not on the last step (e.g. user pressed Enter)
     if (step < steps.length - 1) {
         next();
@@ -152,17 +154,24 @@ export function CreateChannelForm() {
 
     if (handleStatus === "taken" || handleStatus === "checking") return;
 
-    startTransition(async () => {
+    setIsPending(true);
+    try {
       const result = await createChannelAction(values);
       if (result.success) {
-        // Success - Close modal and refresh
+        // Success - Close modal and update switcher optimistically
+        // No full page refresh needed as server revalidatePath handles next visit
+        addChannel((result as any).data);
         setOpen(false);
-        router.refresh(); 
       } else {
          const errorMsg = "error" in result ? result.error : "Failed to create channel";
          form.setError("root", { message: errorMsg });
       }
-    });
+    } catch (err) {
+      console.error(err);
+      form.setError("root", { message: "Something went wrong" });
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (

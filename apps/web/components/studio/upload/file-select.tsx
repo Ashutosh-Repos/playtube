@@ -43,12 +43,13 @@ export function FileSelect({ variant = "default", className, children }: Props) 
         throw new Error(result.error?.message || "Failed to initiate upload");
       }
 
-      const { videoId, uploadUrl, wsUrl } = result.data;
-      console.log(`[Client] 🟢 Server Action Success! Video ID: ${videoId}`);
+      const { videoId, uploadId, wsUrl } = result.data;
+      console.log(`[Client] 🟢 Server Action Success! Video ID: ${videoId} UploadID: ${uploadId}`);
       console.log(`[Client] 🚀 Calling uploadManager.startUpload...`);
 
       // 2. Start Upload (Client Manager)
-      uploadManager.startUpload(videoId, file, uploadUrl, wsUrl);
+      // We pass uploadId for Multipart support
+      uploadManager.startUpload(videoId, file, uploadId, wsUrl);
 
       toast.success("Upload started", { id: toastId });
       

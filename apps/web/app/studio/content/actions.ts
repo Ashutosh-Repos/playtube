@@ -4,15 +4,12 @@ import { revalidatePath } from "next/cache";
 import { videoService } from "@/lib/api/video-service";
 
 export async function revalidateVideoList() {
-    console.log("🔄 [Action] Revalidating /studio/content");
     revalidatePath("/studio/content");
 }
 
 export async function getChannelVideosAction(channelId: string, page = 1, limit = 10) {
   try {
-    console.log(`🔍 [VideosTab] Fetching videos for Channel: ${channelId}, Page: ${page}`);
     const response = await videoService.listVideos({ channelId, page, limit });
-    console.log(`✅ [VideosTab] Found ${response.data.length} videos. Success: ${response.success}`);
     return response;
   } catch (error) {
     console.error("Failed to fetch channel videos:", error);

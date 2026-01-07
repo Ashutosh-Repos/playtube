@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useTransition } from "react
 import { switchChannelSession } from "@/app/studio/actions";
 import { useRouter } from "next/navigation";
 
-interface Channel {
+export interface Channel {
   id: string;
   name: string;
   handle: string;
@@ -17,6 +17,7 @@ interface ChannelContextType {
   currentChannel: Channel | null;
   isLoading: boolean;
   switchChannel: (channelId: string) => Promise<void>;
+  addChannel: (channel: Channel) => void;
 }
 
 const ChannelContext = createContext<ChannelContextType | undefined>(undefined);
@@ -32,8 +33,18 @@ export function ChannelProvider({
   initialChannels,
   initialChannel, 
 }: ChannelProviderProps) {
-  const [channels] = useState<Channel[]>(initialChannels);
+  const [channels, setChannels] = useState<Channel[]>(initialChannels);
   const [currentChannel, setCurrentChannel] = useState<Channel | null>(initialChannel);
+
+  // Sync state with props when server revalidates (e.g. after create channel or switch)
+  React.useEffect(() => {
+    setChannels(initialChannels);
+  }, [initialChannels]);
+
+  React.useEffect(() => {
+    setCurrentChannel(initialChannel);
+  }, [initialChannel]);
+
   // isLoading is effectively always false now because data is pre-loaded on server
   const [isLoading] = useState(false); 
   const [isPending, startTransition] = useTransition();
@@ -58,8 +69,14 @@ export function ChannelProvider({
     });
   };
 
+  const addChannel = (channel: Channel) => {
+    setChannels((prev) => [channel, ...prev]);
+    // Optionally switch to it immediately?
+    // switchChannel(channel.id); // User might not want auto-switch, but usually 'Create' implies 'Switch'
+  };
+
   return (
-    <ChannelContext.Provider value={{ channels, currentChannel, isLoading, switchChannel }}>
+    <ChannelContext.Provider value={{ channels, currentChannel, isLoading, switchChannel, addChannel }}>
       {children}
     </ChannelContext.Provider>
   );

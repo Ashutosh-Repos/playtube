@@ -1,7 +1,7 @@
 
 import { Router, Request, Response } from "express";
-import { prisma } from "@repo/database";
-import { requireAuth, AuthUser } from "@repo/shared";
+import { prisma, playlistSelect, playlistListSelect, PlaylistPayload, PlaylistListPayload } from "@repo/database";
+import { requireAuth, AuthUser, PlaylistDetails, PlaylistListItem } from "@repo/shared";
 import { z } from "zod";
 import { publishMessage, EXCHANGES, EVENTS } from "@repo/events";
 
@@ -30,6 +30,21 @@ const updatePlaylistSchema = z.object({
 
 const addVideoSchema = z.object({
   videoId: z.string(),
+});
+
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+
+const transformPlaylist = (playlist: PlaylistPayload): PlaylistDetails => ({
+    ...playlist,
+    createdAt: playlist.createdAt.toISOString(),
+    updatedAt: playlist.updatedAt.toISOString(),
+});
+
+const transformPlaylistListItem = (playlist: PlaylistListPayload): PlaylistListItem => ({
+    ...playlist,
+    updatedAt: playlist.updatedAt.toISOString(),
 });
 
 // -----------------------------------------------------------------------------
@@ -90,7 +105,8 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
         description,
         visibility,
       },
-    });
+      select: playlistSelect,
+    }) as PlaylistPayload;
 
     await publishMessage(EXCHANGES.PLAYLIST, EVENTS.PLAYLIST_CREATED, {
         playlistId: playlist.id,
@@ -100,7 +116,7 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
         visibility: playlist.visibility as "PUBLIC" | "PRIVATE" | "UNLISTED",
     });
 
-    res.status(201).json({ success: true, data: playlist });
+    res.status(201).json({ success: true, data: transformPlaylist(playlist) });
   } catch (error) {
     console.error("Create playlist error:", error);
     res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Failed to create playlist" } });
@@ -132,21 +148,10 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
     const playlists = await prisma.playlist.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        visibility: true,
-        thumbnailUrl: true,
-        videoCount: true,
-        isSystem: true,
-        systemType: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+      select: playlistListSelect,
+    }) as PlaylistListPayload[];
 
-    res.json({ success: true, data: playlists });
+    res.json({ success: true, data: playlists.map(p => transformPlaylistListItem(p)) });
   } catch (error) {
     console.error("List playlists error:", error);
     res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Failed to list playlists" } });
@@ -164,7 +169,8 @@ router.get("/:id", requireAuth, async (req: Request, res: Response) => {
 
     const playlist = await prisma.playlist.findUnique({
       where: { id },
-      include: {
+      select: {
+        ...playlistSelect,
         videos: {
           orderBy: { position: "asc" },
           where: {
@@ -186,7 +192,7 @@ router.get("/:id", requireAuth, async (req: Request, res: Response) => {
           },
         },
       },
-    });
+    }) as any; // Cast to any because the combined select is complex
 
     if (!playlist || playlist.deletedAt) {
       return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Playlist not found" } });
@@ -203,10 +209,10 @@ router.get("/:id", requireAuth, async (req: Request, res: Response) => {
     // Filter videos:
     // If not owner, filter out PRIVATE videos from the public playlist
     if (!isOwner && isPublic) {
-      playlist.videos = playlist.videos.filter((pv) => pv.video.visibility === "PUBLIC");
+      playlist.videos = playlist.videos.filter((pv: any) => pv.video.visibility === "PUBLIC");
     }
 
-    res.json({ success: true, data: playlist });
+    res.json({ success: true, data: transformPlaylist(playlist) });
   } catch (error) {
     console.error("Get playlist error:", error);
     res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Failed to fetch playlist" } });
@@ -243,7 +249,8 @@ router.patch("/:id", requireAuth, async (req: Request, res: Response) => {
     const updated = await prisma.playlist.update({
       where: { id },
       data: { title, description, visibility },
-    });
+      select: playlistSelect,
+    }) as PlaylistPayload;
 
     await publishMessage(EXCHANGES.PLAYLIST, EVENTS.PLAYLIST_UPDATED, {
         playlistId: updated.id,
@@ -253,7 +260,7 @@ router.patch("/:id", requireAuth, async (req: Request, res: Response) => {
         visibility: updated.visibility as "PUBLIC" | "PRIVATE" | "UNLISTED",
     });
 
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: transformPlaylist(updated) });
   } catch (error) {
     console.error("Update playlist error:", error);
     res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Failed to update playlist" } });

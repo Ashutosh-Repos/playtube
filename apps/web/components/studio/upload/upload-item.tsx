@@ -1,5 +1,8 @@
+"use client";
+
 import { UploadItem as IUploadItem, useUploadStore } from "@/store/upload-store";
-import { Loader2, AlertCircle, CheckCircle, X, FileVideo } from "lucide-react";
+import React from 'react';
+import { Loader2, AlertCircle, CheckCircle, X, FileVideo, PauseCircle, PlayCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
@@ -10,12 +13,46 @@ interface Props {
 }
 
 export function UploadItem({ item }: Props) {
-    const { cancelUpload, retryUpload } = useUploadActions();
+    const { cancelUpload, retryUpload, pauseUpload } = useUploadActions();
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const isUploading = item.status === 'uploading';
     const isProcessing = item.status === 'processing';
     const isCompleted = item.status === 'completed';
     const isError = item.status === 'error';
+    const isPaused = item.status === 'paused';
+
+    // Check if we have the actual File object (active session) or just metadata (restored)
+    const hasFileRef = item.file instanceof File;
+
+    const handleResumeClick = () => {
+        if (hasFileRef) {
+            retryUpload(item.id);
+        } else {
+            // Trigger file selection to re-acquire the blob
+            fileInputRef.current?.click();
+        }
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validation: Must match the original file to ensure integrity
+        if (file.name !== item.file.name || file.size !== item.file.size) {
+            // Basic check. Ideally hash, but name+size is decent basic protection.
+            // Using toast directly or through store? component imports check...
+            // toast is not imported. Using alert for now or need to import toast.
+            // Actually useUploadActions uses toast, we can't easily access toast here unless imported.
+            // Let's rely on status update or simply return.
+            alert("File mismatch! Please select the same file to resume.");
+            e.target.value = ""; // Reset
+            return;
+        }
+
+        retryUpload(item.id, file);
+        e.target.value = ""; // Reset
+    };
 
     const percentage = isUploading ? item.progress : item.processingProgress;
     let statusText = "";
@@ -23,10 +60,18 @@ export function UploadItem({ item }: Props) {
     if (isError) statusText = item.error || "Upload failed";
     else if (isCompleted) statusText = "Completed";
     else if (isProcessing) statusText = "Processing...";
+    else if (isPaused) statusText = "Paused";
     else statusText = `Uploading ${Math.round(percentage)}%`;
 
     return (
         <div className="flex gap-3 items-center p-3 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors group">
+            <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept="video/*"
+                onChange={handleFileSelect}
+            />
             {/* Thumbnail / Icon */}
             <div className="relative h-12 w-20 bg-neutral-200 dark:bg-neutral-800 rounded overflow-hidden shrink-0 flex items-center justify-center">
                 {item.thumbnailUrl ? (
@@ -65,8 +110,37 @@ export function UploadItem({ item }: Props) {
                                  <X className="h-3 w-3" />
                              </Button>
                          )}
-                         {/* Retry Logic for Error */}
-                         {isError && (
+                         {/* Control Buttons */}
+                         {(isUploading || isPaused || (!hasFileRef && isError)) && ( 
+                             // Show controls if Uploading, Paused, OR Error+MissingFile (Interrupted state)
+                             <div className="flex items-center">
+                                 {isUploading && (
+                                     <Button
+                                         variant="ghost"
+                                         size="icon"
+                                         className="h-6 w-6 text-neutral-400 hover:text-blue-500"
+                                         onClick={() => pauseUpload(item.id)}
+                                         title="Pause Upload"
+                                     >
+                                         <PauseCircle className="h-4 w-4" />
+                                     </Button>
+                                 )}
+                                 {(isPaused || (!hasFileRef && isError)) && (
+                                     <Button
+                                         variant="ghost"
+                                         size="icon"
+                                         className="h-6 w-6 text-neutral-400 hover:text-green-500"
+                                         onClick={handleResumeClick}
+                                         title={hasFileRef ? "Resume Upload" : "Select File to Resume"}
+                                     >
+                                         <PlayCircle className="h-4 w-4" />
+                                     </Button>
+                                 )}
+                             </div>
+                         )}
+
+                         {/* Retry Logic for Standard Error (where file exists) */}
+                         {isError && hasFileRef && (
                               <Button 
                                 variant="ghost" 
                                 size="sm" 

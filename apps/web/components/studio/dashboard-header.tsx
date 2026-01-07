@@ -3,14 +3,13 @@
 import { useChannel } from "@/context/channel-context";
 import { Button } from "@/components/ui/button";
 import { Upload, Radio } from "lucide-react";
-import { Modal, ModalTrigger, ModalBody, ModalContent } from "@/components/ui/animated-modal";
 
 export function DashboardHeader() {
   const { currentChannel } = useChannel();
 
   return (
     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
-      <div>
+      {/* <div>
         <h1 className="text-3xl font-bold tracking-tight text-neutral-950 dark:text-neutral-50">
           Channel Dashboard
         </h1>
@@ -19,7 +18,7 @@ export function DashboardHeader() {
                 Welcome back, {currentChannel.name}
             </p>
         )}
-      </div>
+      </div> */}
       
       <div className="flex items-center gap-2">
         {/* We can reuse the upload modal logic here if needed, or just link to it */}

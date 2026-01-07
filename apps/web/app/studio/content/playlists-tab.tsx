@@ -23,13 +23,11 @@ export async function PlaylistsTab({
     const limit = isNaN(parsedLimit) || parsedLimit < 1 ? 10 : parsedLimit;
 
   return (
-    <div className="py-4">
       <PlaylistsTable 
         columns={columns} 
         data={data} 
         initialPage={page}
         pageSize={limit}
       />
-    </div>
   );
 }

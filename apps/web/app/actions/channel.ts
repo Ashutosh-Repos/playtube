@@ -142,7 +142,7 @@ export async function createChannelAction(data: z.infer<typeof createChannelSche
     };
 
     const response = await videoService.createChannel(createData);
-    revalidatePath("/studio");
+    // revalidatePath("/studio"); // Removed to prevent full page reload on client (optimistic update used instead)
     return response;
   } catch (error) {
     if (error instanceof ServiceError) {

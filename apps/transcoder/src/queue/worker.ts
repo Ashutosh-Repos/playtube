@@ -348,6 +348,7 @@ async function handleMergeManifest(job: Job) {
    });
 
    const localDir = path.join(TEMP_DIR, videoId);
+   ensureDir(localDir); // Ensure dir exists even if worker restarted
    console.log("📝 Creating Master Playlist...");
    await createMasterPlaylist(localDir, resolutions);
    

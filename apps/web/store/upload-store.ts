@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-export type UploadStatus = 'uploading' | 'processing' | 'completed' | 'error' | 'interrupted';
+export type UploadStatus = 'uploading' | 'processing' | 'completed' | 'error' | 'interrupted' | 'paused';
 
 export interface UploadItem {
   id: string; // Video ID
-  file: {
+  file: File | {
     name: string;
     size: number;
     type: string;
@@ -53,11 +53,7 @@ export const useUploadStore = create<UploadState>()(
             ...state.uploads,
             [id]: {
               id,
-              file: {
-                name: file.name,
-                size: file.size,
-                type: file.type,
-              },
+              file, // Keep the actual File object in memory!
               progress: 0,
               processingProgress: 0,
               status: 'uploading',
@@ -174,7 +170,20 @@ export const useUploadStore = create<UploadState>()(
       name: 'playtube-uploads', // unique name
       storage: createJSONStorage(() => localStorage), // persist to localStorage
       partialize: (state) => ({ 
-        uploads: state.uploads, // Persist uploads
+        uploads: Object.fromEntries(
+            Object.entries(state.uploads).map(([key, item]) => [
+                key, 
+                {
+                    ...item,
+                    // Strip the File object for storage, keep only metadata
+                    file: {
+                        name: item.file.name,
+                        size: item.file.size,
+                        type: item.file.type
+                    }
+                }
+            ])
+        ), 
         isMinimized: state.isMinimized 
       }),
     }

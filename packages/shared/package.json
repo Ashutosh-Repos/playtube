@@ -27,6 +27,7 @@
     "typescript": "^5.9.0"
   },
   "dependencies": {
+    "@repo/database": "workspace:*",
     "jose": "^6.1.3"
   }
 }

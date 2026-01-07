@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +30,12 @@ export const Tabs = ({
   );
   const [tabs, setTabs] = useState<Tab[]>(propTabs);
 
+  // Sync state with props to handle content updates (e.g. channel switch)
+  useEffect(() => {
+    setTabs(propTabs);
+    setActive(prev => propTabs.find(t => t.value === prev.value) || propTabs[0]);
+  }, [propTabs]);
+
   const moveSelectedTabToTop = (idx: number) => {
     const newTabs = [...propTabs];
     const selectedTab = newTabs.splice(idx, 1);
@@ -44,7 +50,7 @@ export const Tabs = ({
     <>
       <div
         className={cn(
-          "flex flex-row items-center justify-start [perspective:1000px] relative overflow-auto sm:overflow-visible no-visible-scrollbar max-w-full w-full",
+          "flex flex-row items-center justify-start relative overflow-auto sm:overflow-visible no-visible-scrollbar max-w-full w-full",
           containerClassName
         )}
       >
@@ -78,12 +84,12 @@ export const Tabs = ({
           </button>
         ))}
       </div>
-      <FadeInDiv
-        tabs={tabs}
-        active={active}
-        key={active.value}
-        hovering={hovering}
-        className={cn("mt-32", contentClassName)}
+        <FadeInDiv
+          tabs={tabs}
+          active={active}
+          key={active.value}
+          hovering={hovering}
+          className={cn(contentClassName)}
       />
     </>
   );
@@ -117,8 +123,12 @@ export const FadeInDiv = ({
           }}
           animate={{
             y: isActive(tab) ? [0, 40, 0] : 0,
+            transition: {
+              duration: 0.6,
+              delay: idx * 0.1,
+            },
           }}
-          className={cn("w-full h-full absolute top-0 left-0", className)}
+          className={cn("w-full h-full absolute top-0 left-0 overflow-scroll bg-white dark:bg-black mt-4", className)}
         >
           {tab.content}
         </motion.div>

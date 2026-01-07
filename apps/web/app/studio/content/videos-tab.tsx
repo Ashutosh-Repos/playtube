@@ -15,7 +15,6 @@ export async function VideosTab({ channelId, searchParams }: { channelId: string
   const meta = result.success && result.meta ? result.meta : { total: 0, page: 1, limit: 10, pages: 0 };
 
   return (
-    <div className="py-4">
       <DataTable 
         columns={columns} 
         data={data} 
@@ -23,6 +22,5 @@ export async function VideosTab({ channelId, searchParams }: { channelId: string
         initialPage={page}
         pageSize={limit}
       />
-    </div>
   );
 }

@@ -29,11 +29,10 @@ export async function initStorage() {
     if (!exists) {
         await minioClient.makeBucket(BUCKET_NAME, "us-east-1");
         console.log(`🪣 Created MinIO bucket: ${BUCKET_NAME}`);
-        
-        // Optional: Set policy for public read if needed (omitted for now)
     } else {
         console.log(`🪣 Connected to MinIO bucket: ${BUCKET_NAME}`);
     }
+
   } catch (err) {
       console.error("❌ Failed to initialize MinIO storage:", err);
       // We don't exit here, but the service might be unhealthy
@@ -72,8 +71,8 @@ export async function getPresignedThumbnailUrl(videoId: string, contentType: str
 /**
  * Get a Presigned URL for GET (Download/Preview)
  */
-export function getFileUrl(objectKey: string | null): string | null {
-  if (!objectKey) return null;
+export function getFileUrl(objectKey: string | null): string {
+  if (!objectKey) return "";
   // If it's a full URL already (e.g. external cdn), return it
   if (objectKey.startsWith("http")) return objectKey;
 
@@ -148,9 +147,135 @@ export async function deleteObjectsWithPrefix(prefix: string): Promise<void> {
  * Extract Video ID from object path
  * e.g. "uploads/123-abc/original" -> "123-abc"
  */
+// Sort of valid regex to extract ID
 export function extractVideoIdFromPath(key: string): string | null {
-  // Regex for uploads/{uuid}/... or processed/{uuid}/...
-  // eslint-disable-next-line no-useless-escape
   const match = key.match(/^(?:uploads|processed)\/([^\/]+)\//);
   return match ? (match[1] || null) : null;
+}
+
+// --- AWS SDK S3 Client (For Multipart Operations) ---
+// We use AWS SDK for granular control over multipart upload steps
+import { 
+  S3Client, 
+  CreateMultipartUploadCommand, 
+  CompleteMultipartUploadCommand, 
+  ListPartsCommand, 
+  AbortMultipartUploadCommand,
+  UploadPartCommand,
+  CompletedPart
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
+const s3Client = new S3Client({
+  // eslint-disable-next-line turbo/no-undeclared-env-vars
+  region: process.env.MINIO_REGION || "us-east-1",
+  endpoint: config.minio.endpoint?.startsWith("http")
+    ? config.minio.endpoint
+    : `${config.minio.useSSL === "true" ? "https" : "http"}://${config.minio.endpoint || "localhost"}:${config.minio.port || 9000}`,
+  credentials: {
+    accessKeyId: config.minio.accessKey || "minioadmin",
+    secretAccessKey: config.minio.secretKey || "minioadmin",
+  },
+  forcePathStyle: true, // Required for MinIO
+});
+
+/**
+ * Start a new Multipart Upload Session
+ */
+export async function createMultipartUpload(videoId: string): Promise<string> {
+  // Ensure we use .mp4 extension so MinIO webhook filter triggers on completion
+  const key = `uploads/${videoId}/original.mp4`;
+  
+  const command = new CreateMultipartUploadCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+    ContentType: "video/mp4", // Default to mp4
+  });
+
+  const response = await s3Client.send(command);
+  if (!response.UploadId) throw new Error("Failed to create multipart upload");
+  return response.UploadId;
+}
+
+/**
+ * Get a Presigned URL for a specific Part
+ */
+export async function getPresignedPartUrl(
+  videoId: string, 
+  uploadId: string, 
+  partNumber: number
+): Promise<string> {
+  const key = `uploads/${videoId}/original.mp4`;
+
+  const command = new UploadPartCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+    UploadId: uploadId,
+    PartNumber: partNumber,
+  });
+
+  // Expire in 1 hour (plenty for a 5MB chunk)
+  return await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+}
+
+/**
+ * Complete the Multipart Upload
+ */
+export async function completeMultipartUpload(
+  videoId: string, 
+  uploadId: string, 
+  parts: CompletedPart[]
+): Promise<void> {
+  const key = `uploads/${videoId}/original.mp4`;
+
+  // Sort parts by PartNumber (Critical for S3)
+  const sortedParts = parts.sort((a, b) => (a.PartNumber || 0) - (b.PartNumber || 0));
+
+  const command = new CompleteMultipartUploadCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+    UploadId: uploadId,
+    MultipartUpload: {
+      Parts: sortedParts,
+    },
+  });
+
+  await s3Client.send(command);
+}
+
+/**
+ * List already uploaded parts (for Resume)
+ */
+export async function listUploadedParts(
+  videoId: string, 
+  uploadId: string
+): Promise<CompletedPart[]> {
+  const key = `uploads/${videoId}/original.mp4`;
+
+  const command = new ListPartsCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+    UploadId: uploadId,
+  });
+
+  const response = await s3Client.send(command);
+  return response.Parts || [];
+}
+
+/**
+ * Abort a Multipart Upload
+ */
+export async function abortMultipartUpload(
+  videoId: string, 
+  uploadId: string
+): Promise<void> {
+  const key = `uploads/${videoId}/original.mp4`;
+
+  const command = new AbortMultipartUploadCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+    UploadId: uploadId,
+  });
+
+  await s3Client.send(command);
 }

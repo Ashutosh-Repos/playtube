@@ -15,7 +15,6 @@ import rateLimit from "express-rate-limit";
 import { setupWebSocket } from "./ws/server";
 import uploadRoutes from "./routes/upload";
 import videoRoutes from "./routes/video";
-import s3EventRoutes from "./routes/s3-events";
 import playlistRoutes from "./routes/playlist";
 import channelRoutes from "./routes/channel";
 
@@ -101,7 +100,6 @@ app.use("/videos", limiter as any, videoRoutes); // General Video Management
 app.use("/playlists", limiter as any, playlistRoutes); // Playlist Management
 app.use("/channels", limiter as any, channelRoutes); // Channel Management
 app.use("/categories", limiter as any, categoriesRoutes); // [NEW] Categories
-app.use("/internal/s3-events", s3EventRoutes); // Internal Webhook - NO Rate Limit
 
 // Global Error Handler
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars

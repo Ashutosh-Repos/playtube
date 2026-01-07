@@ -3,6 +3,7 @@
 import { getCurrentUserAction } from "@/app/actions/auth";
 import { prisma } from "@repo/database";
 import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
 
 // getStudioBootstrap and getActiveChannelId moved to ./data.ts for React.cache optimization
 
@@ -33,6 +34,7 @@ export async function switchChannelSession(channelId: string) {
             maxAge: 60 * 60 * 24 * 30, // 30 days
         });
 
+        revalidatePath("/studio", "layout"); // Ensure the layout and pages re-fetch with new cookie
         return { success: true };
     } catch (error) {
         console.error("Failed to switch channel:", error);

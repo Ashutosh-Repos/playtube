@@ -2,13 +2,14 @@
 import { useCallback } from 'react';
 import { useUploadStore } from '@/store/upload-store';
 import { uploadManager } from '@/lib/upload-manager';
-import { deleteVideoAction, retryUploadAction } from '@/app/studio/upload-actions';
+import { deleteVideoAction } from '@/app/actions/video'; // Fixed import location
+import { retryVideoUpload } from '@/app/actions/video'; // Import correct action
 import { toast } from 'sonner';
 
 export function useUploadActions() {
     const { removeUpload } = useUploadStore();
 
-    const retryUpload = useCallback((id: string) => {
+    const retryUpload = useCallback(async (id: string, newFile?: File) => {
         const state = useUploadStore.getState();
         const item = state.uploads[id];
         
@@ -17,52 +18,87 @@ export function useUploadActions() {
             return;
         }
 
-        console.log(`[Actions] Retrying upload for ${id}`);
-        // Reset status to uploading
-        state.updateStatus(id, 'uploading');
-        
-        // Re-trigger manager
-        // We assume we still have the file object in memory if the tab wasn't closed?
-        // Actually, 'File' objects are not serializable in localStorage.
-        // If strict persistence was used, 'file' might be lost on refresh.
-        // We need to check if we have the file blob.
-        // Limitation: If page refreshed, we cannot retry *Upload* unless we ask user to re-select file.
-        // BUT, if it's just a network glitch and page is open, 'file' object is in store (Zustand memory).
-        
-        if (item.file instanceof File) {
-             uploadManager.retryUpload(id, item.file, item.uploadUrl!, item.wsUrl!);
-             toast.info("Retrying upload...");
+        console.log(`[Actions] Retry/Resuming upload for ${id}`);
+
+        // Prefer newFile if provided, otherwise check stored file
+        const fileToUse = newFile || (item.file instanceof File ? item.file : null);
+
+        if (fileToUse) {
+             // Reset status to uploading
+             state.updateStatus(id, 'uploading');
+             const toastId = toast.loading("Resuming session...");
+             try {
+                // 1. Try to RESUME existing session (Smart Resume)
+                const existingUploadId = localStorage.getItem(`upload_session_${id}`);
+                const existingWsUrl = item.wsUrl;
+
+                if (existingUploadId && existingWsUrl) {
+                     console.log("[Actions] Found existing session, resuming...", existingUploadId);
+                     uploadManager.retryUpload(id, fileToUse, existingUploadId, existingWsUrl);
+                     toast.success("Resumed", { id: toastId });
+                     return; 
+                }
+
+                // 2. If no session, Create NEW (Hard Retry)
+                console.log("[Actions] No local session found, creating new one...");
+                const res = await retryVideoUpload(id) as any;
+                if (!res.success) throw new Error(res.error || "Retry failed");
+
+                const { uploadId, wsUrl } = res.data; 
+                
+                // Pass new uploadId
+                uploadManager.retryUpload(id, fileToUse, uploadId, wsUrl);
+                toast.success("Restarted", { id: toastId });
+
+             } catch (e) {
+                 console.error(e);
+                 toast.error("Failed to resume session", { id: toastId });
+                 state.updateStatus(id, 'error', 'Retry failed');
+             }
         } else {
-             toast.error("Cannot retry: File reference lost. Please restart upload.");
-             // TODO: Might need a UI to re-attach file if we want robust recovery across reloads.
+             toast.error("File reference lost. Please select the file again.");
         }
     }, []);
 
     const cancelUpload = useCallback((id: string) => {
         console.log(`[Actions] Canceling upload ${id}`);
         // 1. Abort Manager
-        uploadManager.abort(id);
+        uploadManager.cancelUpload(id); // Fixed method name
         // 2. Remove locally
         removeUpload(id);
-        // 3. Optional: Call API to delete partial DB record?
-        // We should probably leave it to the cleanup script or explicit delete.
-        // 3. Delete Server (via Server Action)
+        // 3. Delete Server
         deleteVideoAction(id).then(res => {
             if (!res.success) console.warn("Failed to cleanup video record on server", res.error);
         });
         toast("Upload canceled");
     }, [removeUpload]);
 
+    const pauseUpload = useCallback((id: string) => {
+        console.log(`[Actions] Pausing upload ${id}`);
+        uploadManager.pauseUpload(id);
+    }, []);
+
     const retryProcessing = useCallback(async (id: string) => {
         console.log(`[Actions] Retrying processing for ${id}`);
         try {
              const state = useUploadStore.getState();
+             const item = state.uploads[id];
+             if (!item) throw new Error("Upload not found");
+             
+             if (!(item.file instanceof File)) {
+                 toast.error("Cannot retry: File source is missing. Please re-upload.");
+                 return;
+             }
+
              state.updateStatus(id, 'processing'); // Optimistic
              
-             const res = await retryUploadAction(id);
-             if (!res.success) throw new Error(res.error);
+             const res = await retryVideoUpload(id);
+             if (!res.success) throw new Error((res as any).error || "Retry failed");
              
-             toast.info("Retrying processing...");
+             const { uploadId, wsUrl } = (res as any).data;
+             
+             // Pass new uploadId
+             uploadManager.retryUpload(id, item.file, uploadId, wsUrl);
         } catch (e) {
              toast.error("Failed to retry processing");
              console.error(e);
@@ -73,7 +109,7 @@ export function useUploadActions() {
     // Deletes both local and server
     const deleteUpload = useCallback(async (id: string) => {
          // 1. Abort/Remove Local
-         uploadManager.abort(id);
+         uploadManager.cancelUpload(id); // Fixed method name
          removeUpload(id);
          
          // 2. Delete Server
@@ -88,6 +124,7 @@ export function useUploadActions() {
     return {
         retryUpload,
         cancelUpload,
+        pauseUpload,
         retryProcessing,
         deleteUpload
     };
